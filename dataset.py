@@ -14,7 +14,8 @@ import os.path
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg"])
 
-def load_img(filepath, nFrames, scale, other_dataset, upscale_only):
+# shinjo modified
+def load_img(filepath, nFrames, scale, other_dataset, upscale_only=False):
     seq = [i for i in range(1, nFrames)]
     #random.shuffle(seq) #if random sequence
     if other_dataset:
@@ -54,7 +55,8 @@ def load_img(filepath, nFrames, scale, other_dataset, upscale_only):
     
     return target, input, neigbor
 
-def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only):
+# shinjo modified
+def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False):
     tt = int(nFrames/2)
     if other_dataset:
         if upscale_only:
