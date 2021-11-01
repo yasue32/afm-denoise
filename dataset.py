@@ -60,8 +60,11 @@ def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False)
     tt = int(nFrames/2)
     if other_dataset:
         if upscale_only:
-            target = Image.open(filepath).convert('RGB')
-            input = target
+            #target = Image.open(filepath).convert('RGB')
+            #input = target
+            gt_path = "/".join(filepath.split("/")[:-1]) + "gt.png"
+            target = Image.open(gt_path).convert('RGB')
+            input = Image.open(filepath).convert('RGB')
         else:
             target = modcrop(Image.open(filepath).convert('RGB'),scale)
             input = target.resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
@@ -191,7 +194,9 @@ class DatasetFromFolder(data.Dataset):
     def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, transform=None):
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
+        #print(alist)
         self.image_filenames = [join(image_dir,x) for x in alist]
+        #print(self.image_filenames)
         self.nFrames = nFrames
         self.upscale_factor = upscale_factor
         self.transform = transform
@@ -229,7 +234,7 @@ class DatasetFromFolder(data.Dataset):
         return len(self.image_filenames)
 
 class DatasetFromFolderTest(data.Dataset):
-    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=False):
+    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True):
         super(DatasetFromFolderTest, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         self.image_filenames = [join(image_dir,x) for x in alist]
