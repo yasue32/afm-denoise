@@ -62,12 +62,16 @@ def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False)
         if upscale_only:
             #target = Image.open(filepath).convert('RGB')
             #input = target
-            gt_path = "/".join(filepath.split("/")[:-1]) + "gt.png"
+            gt_path = "/".join(filepath.split("/")[:-1]) + "/gt.png"
             target = Image.open(gt_path).convert('RGB')
             input = Image.open(filepath).convert('RGB')
         else:
-            target = modcrop(Image.open(filepath).convert('RGB'),scale)
-            input = target.resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+            #target = modcrop(Image.open(filepath).convert('RGB'),scale)
+            #input = target.resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+            gt_path = "/".join(filepath.split("/")[:-1]) + "/gt.png"
+            target = Image.open(gt_path).convert('RGB')
+            input = modcrop(Image.open(filepath).convert('RGB'),scale)
+            input = input.resize((int(input.size[0]/scale),int(input.size[1]/scale)), Image.BICUBIC)
         
         char_len = len(filepath)
         neigbor=[]
