@@ -117,3 +117,4 @@ venv.bak/
 
 vimeo_septuplet/
 statistics/
+*.pth
