@@ -14,6 +14,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import utils
+from torch.utils.tensorboard import SummaryWriter
 
 ################################################## iSEEBETTER TRAINER KNOBS ############################################
 UPSCALE_FACTOR = 4
@@ -50,6 +51,8 @@ parser.add_argument('--APITLoss', action='store_true', help='Use APIT Loss')
 parser.add_argument('--useDataParallel', action='store_true', help='Use DataParallel')
 parser.add_argument('-v', '--debug', default=False, action='store_true', help='Print debug spew.')
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
+parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
+
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
     trainBar = tqdm(training_data_loader)
@@ -199,6 +202,12 @@ def saveModelParams(epoch, runningResults, netG, netD):
         #results['PSNR'].append(validationResults['PSNR'])
         #results['SSIM'].append(validationResults['SSIM'])
 
+        # tensorboard に保存
+        writer.add_scalar("DLoss", results["Dloss"][-1], epoch)
+        writer.add_scalar("GLoss", results["Gloss"][-1], epoch)
+        writer.add_scalar("DScore", results["DScore"][-1], epoch)
+        writer.add_scalar("GScore", results["GScore"][-1], epoch)
+
         if epoch % 1 == 0 and epoch != 0:
             out_path = 'statistics/'
             data_frame = pd.DataFrame(data={'DLoss': results['DLoss'], 'GLoss': results['GLoss'], 'DScore': results['DScore'],
@@ -226,6 +235,8 @@ def main():
     """ Lets begin the training process! """
 
     args = parser.parse_args()
+
+    writer = SummaryWriter(log_dir=args.log_dir)
 
     # Initialize Logger
     logger.initLogger(args.debug)
@@ -294,6 +305,8 @@ def main():
 
         if (epoch + 1) % (args.snapshots) == 0:
             saveModelParams(epoch, runningResults, netG, netD)
+    
+    writer.close()
 
 if __name__ == "__main__":
     main()

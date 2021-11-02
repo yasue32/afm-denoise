@@ -1,0 +1,1 @@
+python3 iSeeBetterTrain.py --RBPN_only --other_dataset True --data_dir afm_dataset/210923 --file_list sep_trainlist.txt --patch_size 0 --gpu_id 4
