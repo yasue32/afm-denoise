@@ -14,6 +14,10 @@ class Net(nn.Module):
         #feat=64
         self.nFrames = nFrames
         
+        if scale_factor == 1:
+        	kernel = 3
+        	stride = 1
+        	padding = 1
         if scale_factor == 2:
         	kernel = 6
         	stride = 2

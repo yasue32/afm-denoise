@@ -161,10 +161,8 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
             runningResults['DLoss'] += DLoss.item() * args.batchSize
             runningResults['DScore'] += realOut.item() * args.batchSize
 
-            trainBar.set_description(desc='[Epoch: %d/%d] G Loss: %.4f D(G(z)): %.4f' %
-                                    (epoch, args.nEpochs,
-                                    runningResults['GLoss'] / runningResults['batchSize'],
-                                    runningResults['GScore'] / runningResults['batchSize']))
+            trainBar.set_description(desc='[Epoch: %d/%d] G Loss: %.4f' %
+                                    (epoch, args.nEpochs, runningResults['GLoss'] / runningResults['batchSize']))
         else:
             trainBar.set_description(desc='[Epoch: %d/%d] D Loss: %.4f G Loss: %.4f D(x): %.4f D(G(z)): %.4f' %
                                         (epoch, args.nEpochs, runningResults['DLoss'] / runningResults['batchSize'],
@@ -183,7 +181,9 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
 
     return runningResults
 
-def saveModelParams(epoch, runningResults, netG, netD):
+def saveModelParams(epoch, runningResults, netG, netD, save_folder):# shinjo
+    pathG = os.path.join(save_folder, 'netG_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch)) # shinjo
+    pathD = os.path.join(save_folder, 'netD_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch))
     if netD: # shinjo modified
         results = {'DLoss': [], 'GLoss': [], 'DScore': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
 
@@ -218,9 +218,9 @@ def saveModelParams(epoch, runningResults, netG, netD):
         results = {'GLoss': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
 
         # Save model parameters
-        torch.save(netG.state_dict(), 'weights/netG_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch))
+        torch.save(netG.state_dict(), pathG)
 
-        logger.info("Checkpoint saved to {}".format('weights/netG_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch)))
+        logger.info("Checkpoint saved to {}".format(pathG))
 
         # Save Loss\Scores\PSNR\SSIM
         results['GLoss'].append(runningResults['GLoss'] / runningResults['batchSize'])
@@ -303,10 +303,9 @@ def main():
     for epoch in range(args.start_epoch, args.nEpochs + 1):
         runningResults = trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args)
 
-        if (epoch + 1) % (args.snapshots) == 0:
-            saveModelParams(epoch, runningResults, netG, netD)
-    
-    writer.close()
+        # if (epoch + 1) % (args.snapshots) == 0:
+        if epoch % args.snapshots == 0: # shinjo
+            saveModelParams(epoch, runningResults, netG, netD, args.save_folder)
 
 if __name__ == "__main__":
     main()

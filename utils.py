@@ -25,8 +25,10 @@ def loadPreTrainedModel(gpuMode, model, modelPath):
 
             new_state_dict = OrderedDict()
             for k, v in state_dict.items():
-                name = "module." + k if not k.startswith("module.") else k  # remove module.
+                # name = "module." + k if not k.startswith("module.") else k  # remove module.
+                name = k[7:] if k.startswith("module.") else k
                 new_state_dict[name] = v
+
 
             # load params
             model.load_state_dict(new_state_dict)
