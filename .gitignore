@@ -115,5 +115,5 @@ venv.bak/
 *.mp4
 *.png
 
-/vimeo_septuplet
-/statistics
+vimeo_septuplet/
+statistics/
