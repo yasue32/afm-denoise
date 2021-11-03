@@ -17,7 +17,7 @@ import utils
 from torch.utils.tensorboard import SummaryWriter
 
 ################################################## iSEEBETTER TRAINER KNOBS ############################################
-UPSCALE_FACTOR = 4
+#upscale_factor = 4
 ########################################################################################################################
 
 # Handle command line arguments
@@ -181,18 +181,19 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
 
     return runningResults
 
-def saveModelParams(epoch, runningResults, netG, netD, save_folder):# shinjo
-    pathG = os.path.join(save_folder, 'netG_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch)) # shinjo
-    pathD = os.path.join(save_folder, 'netD_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch))
+
+def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_factor):
+    pathG = os.path.join(save_folder, 'netG_epoch_%d_%d.pth' % (upscale_factor, epoch)) # shinjo
+    pathD = os.path.join(save_folder, 'netD_epoch_%d_%d.pth' % (upscale_factor, epoch))
     if netD: # shinjo modified
         results = {'DLoss': [], 'GLoss': [], 'DScore': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
 
         # Save model parameters
-        torch.save(netG.state_dict(), 'weights/netG_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch))
-        torch.save(netD.state_dict(), 'weights/netD_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch))
+        torch.save(netG.state_dict(), 'weights/netG_epoch_%d_%d.pth' % (upscale_factor, epoch))
+        torch.save(netD.state_dict(), 'weights/netD_epoch_%d_%d.pth' % (upscale_factor, epoch))
 
-        logger.info("Checkpoint saved to {}".format('weights/netG_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch)))
-        logger.info("Checkpoint saved to {}".format('weights/netD_epoch_%d_%d.pth' % (UPSCALE_FACTOR, epoch)))
+        logger.info("Checkpoint saved to {}".format('weights/netG_epoch_%d_%d.pth' % (upscale_factor, epoch)))
+        logger.info("Checkpoint saved to {}".format('weights/netD_epoch_%d_%d.pth' % (upscale_factor, epoch)))
 
         # Save Loss\Scores\PSNR\SSIM
         results['DLoss'].append(runningResults['DLoss'] / runningResults['batchSize'])
@@ -213,7 +214,7 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder):# shinjo
             data_frame = pd.DataFrame(data={'DLoss': results['DLoss'], 'GLoss': results['GLoss'], 'DScore': results['DScore'],
                                     'GScore': results['GScore']},#, 'PSNR': results['PSNR'], 'SSIM': results['SSIM']},
                                     index=range(1, epoch + 1))
-            data_frame.to_csv(out_path + 'iSeeBetter_' + str(UPSCALE_FACTOR) + '_Train_Results.csv', index_label='Epoch')
+            data_frame.to_csv(out_path + 'iSeeBetter_' + str(upscale_factor) + '_Train_Results.csv', index_label='Epoch')
     else:
         results = {'GLoss': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
 
@@ -226,10 +227,13 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder):# shinjo
         results['GLoss'].append(runningResults['GLoss'] / runningResults['batchSize'])
         results['GScore'].append(runningResults['GScore'] / runningResults['batchSize'])
 
+        writer.add_scalar("GLoss", results["Gloss"][-1], epoch)
+        writer.add_scalar("GScore", results["GScore"][-1], epoch)
+
         if epoch % 1 == 0 and epoch != 0:
             out_path = 'statistics/'
             data_frame = pd.DataFrame(data={'GLoss': results['GLoss'], 'GScore': results['GScore']}, index=range(1, epoch + 1))
-            data_frame.to_csv(out_path + 'iSeeBetter_' + str(UPSCALE_FACTOR) + '_Train_Results.csv', index_label='Epoch')
+            data_frame.to_csv(out_path + 'iSeeBetter_' + str(upscale_factor) + '_Train_Results.csv', index_label='Epoch')
 
 def main():
     """ Lets begin the training process! """
@@ -305,7 +309,9 @@ def main():
 
         # if (epoch + 1) % (args.snapshots) == 0:
         if epoch % args.snapshots == 0: # shinjo
-            saveModelParams(epoch, runningResults, netG, netD, args.save_folder)
+            # saveModelParams(epoch, runningResults, netG, netD, args.save_folder)
+            saveModelParams(epoch, runningResults, netG, netD, args.save_folder, args.upscale_factor)
+    writer.close()
 
 if __name__ == "__main__":
     main()

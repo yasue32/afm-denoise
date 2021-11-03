@@ -7,8 +7,11 @@ from torchvision.transforms import *
 class Net(nn.Module):
     def __init__(self, base_filter, feat, num_stages, scale_factor):
         super(Net, self).__init__()
-        
-        if scale_factor == 2:
+        if scale_factor == 1:# shinjo modified
+            kernel = 3
+            stride = 1
+            padding = 1
+        elif scale_factor == 2:
         	kernel = 6
         	stride = 2
         	padding = 2
