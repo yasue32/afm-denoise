@@ -182,7 +182,7 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
     return runningResults
 
 
-def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_factor):
+def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_factor, writer):
     pathG = os.path.join(save_folder, 'netG_epoch_%d_%d.pth' % (upscale_factor, epoch)) # shinjo
     pathD = os.path.join(save_folder, 'netD_epoch_%d_%d.pth' % (upscale_factor, epoch))
     if netD: # shinjo modified
@@ -310,7 +310,7 @@ def main():
         # if (epoch + 1) % (args.snapshots) == 0:
         if epoch % args.snapshots == 0: # shinjo
             # saveModelParams(epoch, runningResults, netG, netD, args.save_folder)
-            saveModelParams(epoch, runningResults, netG, netD, args.save_folder, args.upscale_factor)
+            saveModelParams(epoch, runningResults, netG, netD, args.save_folder, args.upscale_factor, writer)
     writer.close()
 
 if __name__ == "__main__":
