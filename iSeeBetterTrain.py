@@ -8,6 +8,7 @@ from tqdm import tqdm
 from data import get_training_set
 import logger
 from rbpn import Net as RBPN
+from rbpn import Net2 as RBPN2
 from rbpn import GeneratorLoss
 from SRGAN.model import Discriminator
 import torch.nn as nn
@@ -52,6 +53,7 @@ parser.add_argument('--useDataParallel', action='store_true', help='Use DataPara
 parser.add_argument('-v', '--debug', default=False, action='store_true', help='Print debug spew.')
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
+parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
 
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
@@ -204,8 +206,8 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         #results['SSIM'].append(validationResults['SSIM'])
 
         # tensorboard に保存
-        writer.add_scalar("DLoss", results["Dloss"][-1], epoch)
-        writer.add_scalar("GLoss", results["Gloss"][-1], epoch)
+        writer.add_scalar("DLoss", results["DLoss"][-1], epoch)
+        writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
         writer.add_scalar("DScore", results["DScore"][-1], epoch)
         writer.add_scalar("GScore", results["GScore"][-1], epoch)
 
@@ -227,7 +229,7 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         results['GLoss'].append(runningResults['GLoss'] / runningResults['batchSize'])
         results['GScore'].append(runningResults['GScore'] / runningResults['batchSize'])
 
-        writer.add_scalar("GLoss", results["Gloss"][-1], epoch)
+        writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
         writer.add_scalar("GScore", results["GScore"][-1], epoch)
 
         if epoch % 1 == 0 and epoch != 0:
@@ -254,7 +256,11 @@ def main():
                                       shuffle=True)
 
     # Use generator as RBPN
-    netG = RBPN(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+    if args.denoise:
+        netG = RBPN2(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                scale_factor=args.upscale_factor)
+    else:
+        netG = RBPN(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
                 scale_factor=args.upscale_factor)
     logger.info('# of Generator parameters: %s', sum(param.numel() for param in netG.parameters()))
 

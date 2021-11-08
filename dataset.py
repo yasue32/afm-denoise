@@ -211,7 +211,7 @@ class DatasetFromFolder(data.Dataset):
 
     def __getitem__(self, index):
         if self.future_frame:
-            target, input, neigbor = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
+            target, input, neigbor = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, upscale_only=True)
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
 

@@ -6,6 +6,7 @@ import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from rbpn import Net as RBPN
+from rbpn import Net2 as RBPN2
 from data import get_test_set
 import numpy as np
 import utils
@@ -37,6 +38,8 @@ parser.add_argument('--nFrames', type=int, default=7, help="")
 parser.add_argument('--model_type', type=str, default="RBPN", help="")
 parser.add_argument('-d', '--debug', action='store_true', required=False, help="Print debug spew.")
 parser.add_argument('-u', '--upscale_only', action='store_true', required=False, help="Upscale mode - without downscaling.")
+parser.add_argument('--denoise', action='store_true', required=False, help="denoise")
+
 
 args = parser.parse_args()
 
@@ -59,7 +62,11 @@ testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, bat
 
 print('==> Building model ', args.model_type)
 if args.model_type == 'RBPN':
-    model = RBPN(num_channels=3, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
+    if args.denoise:
+        model = RBPN2(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                scale_factor=args.upscale_factor)
+    else:
+        model = RBPN(num_channels=3, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
 
 if cuda:
     model = torch.nn.DataParallel(model, device_ids=gpus_list)
@@ -117,6 +124,12 @@ def eval():
         print("==> Processing: %s || Timer: %.4f sec." % (str(count), (t1 - t0)))
         save_img(prediction.cpu().data, str(count), True)
         save_img(target, str(count), False)
+        
+        #concat img
+        tmp = [input] + neigbor + [prediction]
+        neigbor_img = torch.cat(tmp, 3)
+        print(input.shape, neigbor_img.shape)
+        save_img(neigbor_img, str(count)+"_inputs", False)
         
         prediction = prediction.cpu()
         prediction = prediction.data[0].numpy().astype(np.float32)

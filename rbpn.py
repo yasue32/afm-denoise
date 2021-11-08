@@ -97,6 +97,14 @@ class Net(nn.Module):
         output = self.output(out)
         
         return output
+    
+
+class Net2(Net):
+    def __init__(self, num_channels, base_filter, feat, num_stages, n_resblock, nFrames, scale_factor):
+        super(Net2, self).__init__(num_channels, base_filter, feat, num_stages, n_resblock, nFrames, scale_factor)
+        self.output = ConvBlock((nFrames-1)*feat, num_channels, scale_factor, scale_factor, 0, activation=None, norm=None)
+
+
 
 class GeneratorLoss(nn.Module):
     def __init__(self):
