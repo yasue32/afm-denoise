@@ -16,7 +16,7 @@ def loadPreTrainedModel(gpuMode, model, modelPath):
 
         # Handle the usual (non-DataParallel) case
         try:
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict, strict=False)
 
         # Handle DataParallel case
         except:
@@ -31,7 +31,7 @@ def loadPreTrainedModel(gpuMode, model, modelPath):
 
 
             # load params
-            model.load_state_dict(new_state_dict)
+            model.load_state_dict(new_state_dict, strict=False)
         print('Pre-trained SR model loaded from:', modelPath)
     else:
         print('Couldn\'t find pre-trained SR model at:', modelPath)

@@ -102,7 +102,25 @@ class Net(nn.Module):
 class Net2(Net):
     def __init__(self, num_channels, base_filter, feat, num_stages, n_resblock, nFrames, scale_factor):
         super(Net2, self).__init__(num_channels, base_filter, feat, num_stages, n_resblock, nFrames, scale_factor)
-        self.output = ConvBlock((nFrames-1)*feat, num_channels, scale_factor, scale_factor, 0, activation=None, norm=None)
+
+        if scale_factor == 1:
+        	kernel = 3
+        	stride = 1
+        	padding = 1
+        if scale_factor == 2:
+        	kernel = 6
+        	stride = 2
+        	padding = 2
+        elif scale_factor == 4:
+        	kernel = 8
+        	stride = 4
+        	padding = 2
+        elif scale_factor == 8:
+        	kernel = 12
+        	stride = 8
+        	padding = 2
+
+        self.output = ConvBlock((nFrames-1)*feat, num_channels, kernel, stride, padding, activation=None, norm=None)
 
 
 
