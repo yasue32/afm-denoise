@@ -1,5 +1,6 @@
 from os.path import exists, join, basename
 from os import makedirs, remove
+import os
 from six.moves import urllib
 import tarfile
 from torchvision.transforms import Compose, ToTensor

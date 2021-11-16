@@ -122,3 +122,5 @@ AFM*
 log/
 *.so
 workspace*
+*.pt
+*.tif

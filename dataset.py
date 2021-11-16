@@ -11,6 +11,8 @@ from skimage import img_as_float
 from random import randrange
 import os.path
 
+import time
+
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg"])
 
@@ -75,6 +77,7 @@ def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False)
         
         char_len = len(filepath)
         neigbor=[]
+        neigbor_index=[]
         if nFrames%2 == 0:
             seq = [x for x in range(-tt,tt) if x!=0] # or seq = [x for x in range(-tt+1,tt+1) if x!=0]
         else:
@@ -83,17 +86,19 @@ def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False)
         for i in seq:
             index1 = int(filepath[char_len-7:char_len-4])+i
             file_name1=filepath[0:char_len-7]+'{0:03d}'.format(index1)+'.png'
-            
+
             if os.path.exists(file_name1):
                 if upscale_only:
                     temp = Image.open(file_name1).convert('RGB')
                 else:
                     temp = modcrop(Image.open(file_name1).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
                 neigbor.append(temp)
+                neigbor_index.append(file_name1)
             else:
                 # print('neigbor frame- is not exist')
                 temp=input
                 neigbor.append(temp)
+                neigbor_index.append(filepath)
             
     else:
         if upscale_only:
@@ -107,7 +112,7 @@ def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False)
         #random.shuffle(seq) #if random sequence
         for j in seq:
             neigbor.append(modcrop(Image.open(filepath+'/im'+str(j)+'.png').convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC))
-    return target, input, neigbor
+    return target, input, neigbor, filepath, neigbor_index
 
 def get_flow(im1, im2):
     im1 = np.array(im1)
@@ -127,6 +132,18 @@ def get_flow(im1, im2):
     u, v, im2W = pyflow.coarse2fine_flow(im1, im2, alpha, ratio, minWidth, nOuterFPIterations, nInnerFPIterations,nSORIterations, colType)
     flow = np.concatenate((u[..., None], v[..., None]), axis=2)
     #flow = rescale_flow(flow,0,1)
+    return flow
+
+def get_sift_flow(input_filepath, neigbor_filepath, input, neigbor):
+    flow = []
+    char_len = len(input_filepath)
+    # input_index = int(input_filepath[char_len-7:char_len-4])
+    input_flows = torch.load(input_filepath[:-4]+".pt")
+    for path in neigbor_filepath:
+        char_len = len(path)
+        index1 = int(path[char_len-7:char_len-4])
+        tmp = input_flows[index1+1].numpy()
+        flow.append(tmp)
     return flow
 
 def rescale_flow(x,max_range,min_range):
@@ -211,7 +228,7 @@ class DatasetFromFolder(data.Dataset):
 
     def __getitem__(self, index):
         if self.future_frame:
-            target, input, neigbor = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, upscale_only=True)
+            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, upscale_only=True)
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
 
@@ -220,9 +237,10 @@ class DatasetFromFolder(data.Dataset):
         
         if self.data_augmentation:
             input, target, neigbor, _ = augment(input, target, neigbor)
-            
-        flow = [get_flow(input,j) for j in neigbor]
-            
+
+        # flowb = [get_flow(input,j) for j in neigbor]
+        flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+
         bicubic = rescale_img(input, self.upscale_factor)
         
         if self.transform:
@@ -251,11 +269,12 @@ class DatasetFromFolderTest(data.Dataset):
 
     def __getitem__(self, index):
         if self.future_frame:
-            target, input, neigbor = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
+            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
             
-        flow = [get_flow(input,j) for j in neigbor]
+        #flow = [get_flow(input,j) for j in neigbor]
+        flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
 
         bicubic = rescale_img(input, self.upscale_factor)
         

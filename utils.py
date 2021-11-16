@@ -7,17 +7,18 @@ import os
 import torch
 import logger
 
-def loadPreTrainedModel(gpuMode, model, modelPath):
+def loadPreTrainedModel(gpuMode, model, modelPath, device):
     if os.path.exists(modelPath):
         if gpuMode and torch.cuda.is_available():
-            state_dict = torch.load(modelPath)
+            state_dict = torch.load(modelPath, map_location=device)
         else:
             state_dict = torch.load(modelPath, map_location=torch.device('cpu'))
 
         # Handle the usual (non-DataParallel) case
         try:
-            model.load_state_dict(state_dict, strict=False)
-
+            #print(state_dict)
+            model.load_state_dict(state_dict)
+            
         # Handle DataParallel case
         except:
             # create new OrderedDict that does not contain module.
@@ -26,12 +27,12 @@ def loadPreTrainedModel(gpuMode, model, modelPath):
             new_state_dict = OrderedDict()
             for k, v in state_dict.items():
                 # name = "module." + k if not k.startswith("module.") else k  # remove module.
-                name = k[7:] if k.startswith("module.") else k
+                name = k[7:] if k.startswith("module.") else "module." + k
                 new_state_dict[name] = v
 
 
             # load params
-            model.load_state_dict(new_state_dict, strict=False)
+            model.load_state_dict(new_state_dict)
         print('Pre-trained SR model loaded from:', modelPath)
     else:
         print('Couldn\'t find pre-trained SR model at:', modelPath)

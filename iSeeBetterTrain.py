@@ -24,7 +24,7 @@ from torch.utils.tensorboard import SummaryWriter
 # Handle command line arguments
 parser = argparse.ArgumentParser(description='Train iSeeBetter: Super Resolution Models')
 parser.add_argument('--upscale_factor', type=int, default=4, help="super resolution upscale factor")
-parser.add_argument('--batchSize', type=int, default=2, help='training batch size')
+parser.add_argument('--batchSize', type=int, default=1, help='training batch size')
 parser.add_argument('--testBatchSize', type=int, default=5, help='testing batch size')
 parser.add_argument('--start_epoch', type=int, default=1, help='Starting epoch for continuing training')
 parser.add_argument('--nEpochs', type=int, default=150, help='number of epochs to train for')
@@ -33,8 +33,8 @@ parser.add_argument('--lr', type=float, default=1e-4, help='Learning Rate. Defau
 parser.add_argument('--gpu_mode', type=bool, default=True)
 parser.add_argument('--threads', type=int, default=8, help='number of threads for data loader to use')
 parser.add_argument('--seed', type=int, default=123, help='random seed to use. Default=123')
-parser.add_argument('--gpus', default=8, type=int, help='number of gpu')
-parser.add_argument('--gpu_id', default=0, type=int, help='id of gpu') # shinjo modified
+parser.add_argument('--gpus', default=1, type=int, help='number of gpu')
+parser.add_argument('--gpu_id', default="0", type=str, help='id of gpu') # shinjo modified
 parser.add_argument('--data_dir', type=str, default='./vimeo_septuplet/sequences')
 parser.add_argument('--file_list', type=str, default='sep_trainlist.txt')
 parser.add_argument('--other_dataset', type=bool, default=False, help="use other dataset than vimeo-90k")
@@ -242,6 +242,11 @@ def main():
 
     args = parser.parse_args()
 
+    #os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+    gpus_list =  list(map(int, args.gpu_id.split(",")))
+    #gpus_list = list(range(args.gpus))
+    #print(gpus_list, args.gpu_id)
+
     writer = SummaryWriter(log_dir=args.log_dir)
 
     # Initialize Logger
@@ -266,7 +271,6 @@ def main():
 
     # Use DataParallel?
     if args.useDataParallel:
-        gpus_list = range(args.gpus)
         netG = torch.nn.DataParallel(netG, device_ids=gpus_list)
 
     # Use discriminator from SRGAN
@@ -280,6 +284,7 @@ def main():
     generatorCriterion = nn.L1Loss() if not args.APITLoss else GeneratorLoss()
 
     # Specify device
+    #gpus = ",".join(list(map(str, gpus_list)))
     device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
 
     if args.gpu_mode and torch.cuda.is_available():
@@ -308,7 +313,7 @@ def main():
 
     if args.pretrained:
         modelPath = os.path.join(args.save_folder + args.pretrained_sr)
-        utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netG, modelPath=modelPath)
+        utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netG, modelPath=modelPath, device=device)
 
     for epoch in range(args.start_epoch, args.nEpochs + 1):
         runningResults = trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args)

@@ -24,7 +24,7 @@ parser.add_argument('-o', '--output', default='Results/', help="Location to save
 parser.add_argument('-s', '--upscale_factor', type=int, default=4, help="Super-Resolution Scale Factor")
 parser.add_argument('-r', '--residual', action='store_true', required=False, help="")
 parser.add_argument('-c', '--gpu_mode', action='store_true', required=False, help="Use a CUDA compatible GPU if available")
-parser.add_argument('--gpu_id', default=0, type=int, help='id of gpu')
+parser.add_argument('--gpu_id', default="0", type=str, help='id of gpu')
 parser.add_argument('--testBatchSize', type=int, default=1, help="Testing Batch Size")
 parser.add_argument('--chop_forward', action='store_true', required=False, help="")
 parser.add_argument('--threads', type=int, default=1, help="Dataloader Threads")
@@ -43,7 +43,8 @@ parser.add_argument('--denoise', action='store_true', required=False, help="deno
 
 args = parser.parse_args()
 
-gpus_list=range(args.gpus)
+#gpus_list=range(args.gpus)
+gpus_list = list(map(int, args.gpu_id.split(",")))
 print(args)
 
 cuda = args.gpu_mode
@@ -68,11 +69,11 @@ if args.model_type == 'RBPN':
     else:
         model = RBPN(num_channels=3, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
 
-if cuda:
+if cuda and len(gpus_list)>=2:
     model = torch.nn.DataParallel(model, device_ids=gpus_list)
 
 #device = torch.device("cuda:0" if cuda and torch.cuda.is_available() else "cpu")
-device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
+device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu")
 
 
 if cuda:
@@ -87,7 +88,7 @@ def eval():
 
     # load model
     modelPath = os.path.join(args.model)
-    utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=model, modelPath=modelPath)
+    utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=model, modelPath=modelPath, device=device)
 
     model.eval()
     count = 0
@@ -129,7 +130,7 @@ def eval():
         tmp = [input] + neigbor + [prediction]
         neigbor_img = torch.cat(tmp, 3)
         print(input.shape, neigbor_img.shape)
-        save_img(neigbor_img, str(count)+"_inputs", False)
+        save_img(neigbor_img.cpu(), str(count)+"_inputs", False)
         
         prediction = prediction.cpu()
         prediction = prediction.data[0].numpy().astype(np.float32)
