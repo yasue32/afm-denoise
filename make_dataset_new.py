@@ -63,7 +63,7 @@ def make_patch(imgs, n_patch=2):
             for n3 in range(n_burst): # n_burst枚数ずつimgがある
                 img_patch[n3] = imgs[n3][isy:igy, isx:igx]
             patches.append(img_patch)
-
+    print(len(patches))
     return patches
 
 
@@ -194,7 +194,7 @@ def save_img_and_flow(p, imgs, noise_level_list, flows, save_filepath, visualize
 
 
 def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=False, file_name="{:05}.png", 
-    n_burst=10, sift_step_size = 1, kernel_size = 8):
+    n_burst=10, sift_step_size = 1, kernel_size = 8,n_patch=2):
     files = glob.glob(load_filepath+"/" + sub_dir + "/*")
     n_set = int(len(files)/n_burst)
 
@@ -215,7 +215,7 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
     for i in range(n_set):
         index = list(range(i*n_burst, (i+1)*n_burst))
         imgs = read_imgs(load_filepath+"/"+sub_dir, file_name, index)
-        patches = make_patch(imgs)
+        patches = make_patch(imgs,n_patch=n_patch)
         for j, patch in enumerate(patches):
             flows = cal_flow(sift_flow, patch, kernel_size=kernel_size)
             noise_level_list = cal_noise_level(flows)
@@ -245,7 +245,13 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
                             flag = 0
                         f.write(sub_dir+"/"+file_names[n])
 
-#main("orig_img", "210923", save_filepath="afm_dataset", kernel_size=7, write_all_index=True)
-#main("orig_img", "211106", save_filepath="afm_dataset", kernel_size=7, write_all_index=True)
-main("orig_img", "211108", save_filepath="afm_dataset", kernel_size=7, write_all_index=True)
-main("orig_img", "211109_2", save_filepath="afm_dataset", kernel_size=7, write_all_index=False)
+# main("orig_img", "210923", save_filepath="afm_dataset", kernel_size=7, write_all_index=True)
+# main("orig_img", "211022", save_filepath="afm_dataset2", kernel_size=7, n_patch=2, write_all_index=True)
+# main("orig_img", "211023", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
+# main("orig_img", "211029", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
+# main("orig_img", "211030", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
+# main("orig_img", "211106", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
+# main("orig_img", "211108", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
+# main("orig_img", "211109_2", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=False)
+# main("orig_img", "211109", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
+main("orig_img", "211112", save_filepath="afm_dataset4", kernel_size=7, n_patch=4,write_all_index=False)

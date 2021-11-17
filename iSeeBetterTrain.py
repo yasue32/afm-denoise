@@ -256,7 +256,7 @@ def main():
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
                                  args.file_list,
-                                 args.other_dataset, args.patch_size, args.future_frame)
+                                 args.other_dataset, args.patch_size, args.future_frame, args.denoise)
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
