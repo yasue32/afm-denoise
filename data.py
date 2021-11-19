@@ -15,12 +15,12 @@ def transform():
 def get_training_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, upscale_only):
     print("Training samples chosen:", file_list)
     return DatasetFromFolder(data_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size,future_frame,
-                             transform=transform(), upscale_only)
+                             transform=transform(), upscale_only=upscale_only)
 
 
 def get_eval_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, upscale_only):
     return DatasetFromFolder(data_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size,future_frame,
-                             transform=transform(), upscale_only)
+                             transform=transform(), upscale_only=upscale_only)
 
 def get_test_set(data_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, upscale_only):    
     return DatasetFromFolderTest(data_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=transform(), upscale_only=upscale_only)

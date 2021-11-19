@@ -32,7 +32,10 @@ def loadPreTrainedModel(gpuMode, model, modelPath, device):
 
 
             # load params
-            model.load_state_dict(new_state_dict)
+            try:
+                model.load_state_dict(new_state_dict)
+            except:
+                model.load_state_dict(state_dict, strict=False)
         print('Pre-trained SR model loaded from:', modelPath)
     else:
         print('Couldn\'t find pre-trained SR model at:', modelPath)
