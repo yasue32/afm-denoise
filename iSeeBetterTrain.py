@@ -54,6 +54,7 @@ parser.add_argument('-v', '--debug', default=False, action='store_true', help='P
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
 parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
+parser.add_argument('--warping', action='store_true', required=False, help="warping input imgs to target")
 
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
@@ -244,8 +245,8 @@ def main():
 
     #os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     gpus_list =  list(map(int, args.gpu_id.split(",")))
-    #gpus_list = list(range(args.gpus))
-    #print(gpus_list, args.gpu_id)
+
+    device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
 
     writer = SummaryWriter(log_dir=args.log_dir)
 
@@ -255,8 +256,8 @@ def main():
     # Load dataset
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
-                                 args.file_list,
-                                 args.other_dataset, args.patch_size, args.future_frame, args.denoise)
+                                 args.file_list,args.other_dataset, args.patch_size, 
+                                 args.future_frame, args.denoise, args.warping)
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
@@ -283,13 +284,9 @@ def main():
     # Generator loss
     generatorCriterion = nn.L1Loss() if not args.APITLoss else GeneratorLoss()
 
-    # Specify device
-    #gpus = ",".join(list(map(str, gpus_list)))
-    device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
 
     if args.gpu_mode and torch.cuda.is_available():
         utils.printCUDAStats()
-
         netG = netG.to(device) # shinjo modified
         if not args.RBPN_only: # shinjo modified
             netD = netD.to(device)

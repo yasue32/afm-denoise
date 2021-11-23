@@ -11,6 +11,8 @@ from skimage import img_as_float
 from random import randrange
 import os.path
 
+import net_utils
+import torchvision.transforms as transforms
 import time
 
 def is_image_file(filename):
@@ -121,7 +123,7 @@ def get_flow(im1, im2):
     im2 = im2.astype(float) / 255.
     
     # Flow Options:
-    alpha = 0.012
+    alpha = 0.007
     ratio = 0.75
     minWidth = 20
     nOuterFPIterations = 7
@@ -145,6 +147,27 @@ def get_sift_flow(input_filepath, neigbor_filepath, input, neigbor):
         tmp = input_flows[index1+1].numpy()
         flow.append(tmp)
     return flow
+
+def warping_img(target, input, neigbor):
+    # imgを [np1, np2, ...] -> torch に変換し、warping
+    # torch -> [np1, ...] に戻す
+    loader = transforms.Compose([transforms.ToTensor()]) 
+    flow = get_flow(target, input)
+    flow = torch.from_numpy(flow).unsqueeze(dim=0).permute(0,3,1,2).float()
+    input = loader(input).unsqueeze(dim=0).float()
+    warped_input = net_utils.backward_warp(input, flow)
+    
+    flow_torch = torch.empty(len(neigbor), *flow.shape[1:])
+    neigbor_torch = torch.empty(len(neigbor), *input.shape[1:])
+    for i, img in enumerate(neigbor):
+        tmp = torch.from_numpy(get_flow(target, img)).unsqueeze(dim=0).permute(0,3,1,2).float()
+        flow_torch[i] = tmp
+        neigbor_torch[i] = loader(img).unsqueeze(dim=0).float()
+    tmp = net_utils.backward_warp(neigbor_torch, flow_torch)
+    warped_neigbor = []
+    for i in range(len(flow_torch)):
+        warped_neigbor.append(np.array(tmp[i].permute(1,2,0)))
+    return np.array(warped_input[0].permute(1,2,0)), warped_neigbor
 
 def rescale_flow(x,max_range,min_range):
     max_val = np.max(x)
@@ -212,7 +235,7 @@ def rescale_img(img_in, scale):
     return img_in
 
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, transform=None, upscale_only=True):
+    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, transform=None, upscale_only=True, warping=False):
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         #print(alist)
@@ -226,6 +249,7 @@ class DatasetFromFolder(data.Dataset):
         self.patch_size = patch_size
         self.future_frame = future_frame
         self.upscale_only = upscale_only
+        self.warping = warping
 
     def __getitem__(self, index):
         if self.future_frame:
@@ -239,11 +263,16 @@ class DatasetFromFolder(data.Dataset):
         if self.data_augmentation:
             input, target, neigbor, _ = augment(input, target, neigbor)
 
-        # flowb = [get_flow(input,j) for j in neigbor]
+        bicubic = rescale_img(input, self.upscale_factor)
+
+        #flow = [get_flow(input,j) for j in neigbor]
         flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
 
-        bicubic = rescale_img(input, self.upscale_factor)
-        
+        if self.warping:
+            warped_input, warped_neigbor = warping_img(target, input, neigbor)
+            input = warped_input
+            neigbor = warped_neigbor            
+
         if self.transform:
             target = self.transform(target)
             input = self.transform(input)
@@ -257,7 +286,7 @@ class DatasetFromFolder(data.Dataset):
         return len(self.image_filenames)
 
 class DatasetFromFolderTest(data.Dataset):
-    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True):
+    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True, warping=False):
         super(DatasetFromFolderTest, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         self.image_filenames = [join(image_dir,x) for x in alist]
@@ -267,17 +296,22 @@ class DatasetFromFolderTest(data.Dataset):
         self.other_dataset = other_dataset
         self.future_frame = future_frame
         self.upscale_only = upscale_only
+        self.warping = warping
 
     def __getitem__(self, index):
         if self.future_frame:
             target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
+
+        bicubic = rescale_img(input, self.upscale_factor)
             
         #flow = [get_flow(input,j) for j in neigbor]
         flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
-
-        bicubic = rescale_img(input, self.upscale_factor)
+        if self.warping:
+            _, warped_neigbor = warping_img(input, input, neigbor)
+            # input = warped_input
+            neigbor = warped_neigbor
         
         if self.transform:
             target = self.transform(target)
@@ -285,7 +319,7 @@ class DatasetFromFolderTest(data.Dataset):
             bicubic = self.transform(bicubic)
             neigbor = [self.transform(j) for j in neigbor]
             flow = [torch.from_numpy(j.transpose(2,0,1)) for j in flow]
-            
+        
         return input, target, neigbor, flow, bicubic
       
     def __len__(self):
