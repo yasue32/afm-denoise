@@ -40,6 +40,7 @@ parser.add_argument('-d', '--debug', action='store_true', required=False, help="
 parser.add_argument('-u', '--upscale_only', action='store_true', required=False, help="Upscale mode - without downscaling.")
 parser.add_argument('--denoise', action='store_true', required=False, help="denoise")
 parser.add_argument("--warping", action='store_true', required=False, help="warping input imgs")
+parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
 
 args = parser.parse_args()
 
@@ -58,7 +59,7 @@ if cuda:
     torch.cuda.manual_seed(args.seed)
 
 print('==> Loading datasets')
-test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping)
+test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 
 print('==> Building model ', args.model_type)

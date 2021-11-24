@@ -14,6 +14,7 @@ import os.path
 import net_utils
 import torchvision.transforms as transforms
 import time
+import alignment
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg"])
@@ -123,7 +124,7 @@ def get_flow(im1, im2):
     im2 = im2.astype(float) / 255.
     
     # Flow Options:
-    alpha = 0.007
+    alpha = 0.012
     ratio = 0.75
     minWidth = 20
     nOuterFPIterations = 7
@@ -235,7 +236,7 @@ def rescale_img(img_in, scale):
     return img_in
 
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, transform=None, upscale_only=True, warping=False):
+    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, transform=None, upscale_only=True, warping=False, alignment=False):
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         #print(alist)
@@ -250,6 +251,7 @@ class DatasetFromFolder(data.Dataset):
         self.future_frame = future_frame
         self.upscale_only = upscale_only
         self.warping = warping
+        self.alignment = alignment
 
     def __getitem__(self, index):
         if self.future_frame:
@@ -267,6 +269,12 @@ class DatasetFromFolder(data.Dataset):
 
         #flow = [get_flow(input,j) for j in neigbor]
         flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+
+        if self.alignment:
+            # print(input.size, neigbor[0].size)
+            input = alignment.affine_align(target, [input])[0]
+            neigbor = alignment.affine_align(target, neigbor)
+            # print(input.shape, neigbor[0].shape)
 
         if self.warping:
             warped_input, warped_neigbor = warping_img(target, input, neigbor)
@@ -286,7 +294,7 @@ class DatasetFromFolder(data.Dataset):
         return len(self.image_filenames)
 
 class DatasetFromFolderTest(data.Dataset):
-    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True, warping=False):
+    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True, warping=False, alignment=False):
         super(DatasetFromFolderTest, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         self.image_filenames = [join(image_dir,x) for x in alist]
@@ -297,6 +305,7 @@ class DatasetFromFolderTest(data.Dataset):
         self.future_frame = future_frame
         self.upscale_only = upscale_only
         self.warping = warping
+        self.alignment = alignment
 
     def __getitem__(self, index):
         if self.future_frame:
@@ -308,6 +317,10 @@ class DatasetFromFolderTest(data.Dataset):
             
         #flow = [get_flow(input,j) for j in neigbor]
         flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+
+        if self.alignment:
+            neigbor = alignment.affine_align(input, neigbor)
+
         if self.warping:
             _, warped_neigbor = warping_img(input, input, neigbor)
             # input = warped_input

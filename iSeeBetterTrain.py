@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 import utils
 from torch.utils.tensorboard import SummaryWriter
 
+
 ################################################## iSEEBETTER TRAINER KNOBS ############################################
 #upscale_factor = 4
 ########################################################################################################################
@@ -55,6 +56,7 @@ parser.add_argument('--RBPN_only', action='store_true', required=False, help="us
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
 parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
 parser.add_argument('--warping', action='store_true', required=False, help="warping input imgs to target")
+parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
 
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
@@ -257,7 +259,7 @@ def main():
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
                                  args.file_list,args.other_dataset, args.patch_size, 
-                                 args.future_frame, args.denoise, args.warping)
+                                 args.future_frame, args.denoise, args.warping, args.alignment)
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
