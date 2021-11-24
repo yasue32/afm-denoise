@@ -53,13 +53,14 @@ def make_patch(imgs, n_patch=2):
         print('Error: patch division faild', file=sys.stderr)
         sys.exit(1)
     img_patch_size = int(len(imgs[0][0]) / n_patch)
-    img_patch = [0]*n_burst
+  
     patches = []
 
     for n1 in range(n_patch): # y方向のpatch分割
         isy,igy = n1 * img_patch_size, (n1+1) * img_patch_size 
         for n2 in range(n_patch): # x方向のpatch
             isx,igx = n2 * img_patch_size, (n2+1) * img_patch_size
+            img_patch = [0]*n_burst
             for n3 in range(n_burst): # n_burst枚数ずつimgがある
                 img_patch[n3] = imgs[n3][isy:igy, isx:igx]
             patches.append(img_patch)
@@ -182,13 +183,13 @@ def save_img_and_flow(p, imgs, noise_level_list, flows, save_filepath, visualize
                 if sum(noise)>1600: #th
                     orig_img[line,:,1] = orig_img[line,:,1] *0.5
 
-            plt.figure(figsize = (6,6))
-            plt.imshow(orig_img)
-            file_name = "input{:03}_noise.png".format(i)
-            plt.savefig(save_filepath+"/"+file_name)
-            plt.show()
-            plt.clf()
-            plt.close()
+            # plt.figure(figsize = (6,6))
+            # plt.imshow(orig_img)
+            # file_name = "input{:03}_noise.png".format(i)
+            # plt.savefig(save_filepath+"/"+file_name)
+            # plt.show()
+            # plt.clf()
+            # plt.close()
 
     return file_names
 
@@ -245,13 +246,16 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
                             flag = 0
                         f.write(sub_dir+"/"+file_names[n])
 
-# main("orig_img", "210923", save_filepath="afm_dataset", kernel_size=7, write_all_index=True)
-# main("orig_img", "211022", save_filepath="afm_dataset2", kernel_size=7, n_patch=2, write_all_index=True)
-# main("orig_img", "211023", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
-# main("orig_img", "211029", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
-# main("orig_img", "211030", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
-# main("orig_img", "211106", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
-# main("orig_img", "211108", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
-# main("orig_img", "211109_2", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=False)
-# main("orig_img", "211109", save_filepath="afm_dataset2", kernel_size=7, n_patch=2,write_all_index=True)
-main("orig_img", "211112", save_filepath="afm_dataset4", kernel_size=7, n_patch=4,write_all_index=False)
+n_patch = 4
+
+#main("orig_img", "211109_2", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=False)
+
+#main("orig_img", "210923", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211022", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211023", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211029", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211030", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211106", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211108", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211109", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main("orig_img", "211112", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
