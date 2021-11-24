@@ -53,6 +53,7 @@ parser.add_argument('--useDataParallel', action='store_true', help='Use DataPara
 parser.add_argument('-v', '--debug', default=False, action='store_true', help='Print debug spew.')
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
+parser.add_argument('--shuffle', action='store_true', required=False, help="Use shuffle dataset") # modified by shinjo 1120
 parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
 
 
@@ -255,8 +256,7 @@ def main():
     # Load dataset
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
-                                 args.file_list,
-                                 args.other_dataset, args.patch_size, args.future_frame, args.denoise)
+                                 args.file_list, args.other_dataset, args.patch_size, args.future_frame, args.shuffle, args.denoise) # modified by shinjo 1120
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 

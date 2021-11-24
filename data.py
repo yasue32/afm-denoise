@@ -12,9 +12,10 @@ def transform():
         ToTensor(),
     ])
 
-def get_training_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, upscale_only):
+# modified by shinjo 1120
+def get_training_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, upscale_only):
     print("Training samples chosen:", file_list)
-    return DatasetFromFolder(data_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size,future_frame,
+    return DatasetFromFolder(data_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size,future_frame, shuffle,
                              transform=transform(), upscale_only=upscale_only)
 
 
