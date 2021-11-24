@@ -5,4 +5,4 @@ python3 iSeeBetterTrain.py --upscale_factor 2 --RBPN_only --other_dataset True -
 #test
 python3 iSeeBetterTest.py --model weights/netG_epoch_4_137.pth --upscale_factor 2 --other_dataset True --data_dir afm_dataset/211029 --file_list sep_trainlist.txt --gpu_id 3
 
-python3 iSeeBetterTest.py --upscale_factor 2 --other_dataset True --data_dir afm_dataset2/211109_2 --file_list sep_trainlist.txt --gpu_id 0 --gpus 1 --model netG_epoch_2_26.pth --gpu_mode --upscale_only --denoise --output Results/
+python3 iSeeBetterTest.py --upscale_factor 1 --other_dataset True --data_dir afm_dataset4/211109_2 --file_list sep_trainlist.txt --gpu_id 3 --gpus 1 --model netG_epoch_1_44.pth --gpu_mode --upscale_only --denoise --output Results/scratch1x_patch4_warping/
