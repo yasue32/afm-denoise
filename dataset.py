@@ -3,15 +3,21 @@ import torch
 import numpy as np
 import os
 from os import listdir
-from os.path import join
+from os.path import join, dirname
 from PIL import Image, ImageOps
 import random
 import pyflow
 from skimage import img_as_float
-from random import randrange
+from random import randrange, sample
 import os.path
+from glob import glob
 
 import time
+
+# added by shinjo 1120
+GAMMA = 2.0
+GAMMA_TBL = [int((x / 255.) ** (1. / GAMMA) * 255.) for x in range(256)]
+u_gamma = np.frompyfunc(lambda x: GAMMA_TBL[x], 1, 1)
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg"])
@@ -57,8 +63,8 @@ def load_img(filepath, nFrames, scale, other_dataset, upscale_only=False):
     
     return target, input, neigbor
 
-# shinjo modified
-def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False):
+# shinjo modified 1120
+def load_img_future(filepath, nFrames, scale, other_dataset, shuffle, upscale_only=False):
     tt = int(nFrames/2)
     if other_dataset:
         if upscale_only:
@@ -78,27 +84,39 @@ def load_img_future(filepath, nFrames, scale, other_dataset, upscale_only=False)
         char_len = len(filepath)
         neigbor=[]
         neigbor_index=[]
-        if nFrames%2 == 0:
-            seq = [x for x in range(-tt,tt) if x!=0] # or seq = [x for x in range(-tt+1,tt+1) if x!=0]
-        else:
-            seq = [x for x in range(-tt,tt+1) if x!=0]
-        #random.shuffle(seq) #if random sequence
-        for i in seq:
-            index1 = int(filepath[char_len-7:char_len-4])+i
-            file_name1=filepath[0:char_len-7]+'{0:03d}'.format(index1)+'.png'
-
-            if os.path.exists(file_name1):
-                if upscale_only:
-                    temp = Image.open(file_name1).convert('RGB')
-                else:
-                    temp = modcrop(Image.open(file_name1).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
-                neigbor.append(temp)
-                neigbor_index.append(file_name1)
+        if shuffle: # add by shinjo 1120
+            split_path = filepath.split("/")
+            split_path[-1] = split_path[-1][:-7] + "[0-9][0-9][0-9].png"
+            neigbor_index = [nfilepath for nfilepath in glob("/".join(split_path)) if nfilepath != filepath]
+            neigbor_index = sample(neigbor_index, min(nFrames-1, len(neigbor_index)))
+            if upscale_only:
+                neigbor = [Image.open(nfilepath).convert('RGB') for nfilepath in neigbor_index]
             else:
-                # print('neigbor frame- is not exist')
-                temp=input
-                neigbor.append(temp)
-                neigbor_index.append(filepath)
+                neigbor = [modcrop(Image.open(nfilepath).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC) for nfilepath in neigbor_index]
+            neigbor.extend([input for i in range(nFrames - 1 - len(neigbor))])
+            neigbor_index.extend([filepath for i in range(nFrames - 1 - len(neigbor))])
+        else:
+            if nFrames%2 == 0:
+                seq = [x for x in range(-tt,tt) if x!=0] # or seq = [x for x in range(-tt+1,tt+1) if x!=0]
+            else:
+                seq = [x for x in range(-tt,tt+1) if x!=0]
+            #random.shuffle(seq) #if random sequence
+            for i in seq:
+                index1 = int(filepath[char_len-7:char_len-4])+i
+                file_name1=filepath[0:char_len-7]+'{0:03d}'.format(index1)+'.png'
+
+                if os.path.exists(file_name1):
+                    if upscale_only:
+                        temp = Image.open(file_name1).convert('RGB')
+                    else:
+                        temp = modcrop(Image.open(file_name1).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+                    neigbor.append(temp)
+                    neigbor_index.append(file_name1)
+                else:
+                    # print('neigbor frame- is not exist')
+                    temp=input
+                    neigbor.append(temp)
+                    neigbor_index.append(filepath)
             
     else:
         if upscale_only:
@@ -182,8 +200,8 @@ def get_patch(img_in, img_tar, img_nn, patch_size, scale, nFrames, ix=-1, iy=-1)
 
     return img_in, img_tar, img_nn, info_patch
 
-def augment(img_in, img_tar, img_nn, flip_h=True, rot=True):
-    info_aug = {'flip_h': False, 'flip_v': False, 'trans': False}
+def augment(img_in, img_tar, img_nn, flip_h=True, rot=True, gamma=True):# modified by shinjo 1120
+    info_aug = {'flip_h': False, 'flip_v': False, 'trans': False, 'gamma': False}
     
     if random.random() < 0.5 and flip_h:
         img_in = ImageOps.flip(img_in)
@@ -203,6 +221,12 @@ def augment(img_in, img_tar, img_nn, flip_h=True, rot=True):
             img_nn = [j.rotate(180) for j in img_nn]
             info_aug['trans'] = True
 
+    if gamma: # modified by shinjo 1120
+        img_in = Image.fromarray(u_gamma(np.array(img_in)).astype(np.uint8))
+        img_tar = Image.fromarray(u_gamma(np.array(img_tar)).astype(np.uint8))
+        img_nn = [Image.fromarray(u_gamma(np.array(j)).astype(np.uint8)) for j in img_nn]
+        info_aug['gamma'] = True
+
     return img_in, img_tar, img_nn, info_aug
     
 def rescale_img(img_in, scale):
@@ -212,7 +236,7 @@ def rescale_img(img_in, scale):
     return img_in
 
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, transform=None, upscale_only=True):
+    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True): # modified by shinjo 1120
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         #print(alist)
@@ -224,12 +248,13 @@ class DatasetFromFolder(data.Dataset):
         self.data_augmentation = data_augmentation
         self.other_dataset = other_dataset
         self.patch_size = patch_size
+        self.shuffle = shuffle # added by shinjo 1120
         self.future_frame = future_frame
         self.upscale_only = upscale_only
 
     def __getitem__(self, index):
         if self.future_frame:
-            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
+            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only) # modified by shinjo 1120
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
 
@@ -270,7 +295,7 @@ class DatasetFromFolderTest(data.Dataset):
 
     def __getitem__(self, index):
         if self.future_frame:
-            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
+            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, False, self.upscale_only) # modified by shinjo 1120
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
             

@@ -127,10 +127,11 @@ def eval():
         save_img(target, str(count), False)
         
         #concat img
-        tmp = [input] + neigbor + [prediction]
-        neigbor_img = torch.cat(tmp, 3)
-        print(input.shape, neigbor_img.shape)
-        save_img(neigbor_img.cpu(), str(count)+"_inputs", False)
+        if args.denoise: # modified by shinjo
+            tmp = [input] + neigbor + [prediction]
+            neigbor_img = torch.cat(tmp, 3)
+            print(input.shape, neigbor_img.shape)
+            save_img(neigbor_img.cpu(), str(count)+"_inputs", False)
         
         prediction = prediction.cpu()
         prediction = prediction.data[0].numpy().astype(np.float32)
