@@ -15,8 +15,6 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import utils
-from torch.utils.tensorboard import SummaryWriter
-
 
 ################################################## iSEEBETTER TRAINER KNOBS ############################################
 #upscale_factor = 4
@@ -52,12 +50,17 @@ parser.add_argument('--prefix', default='F7', help='Location to save checkpoint 
 parser.add_argument('--APITLoss', action='store_true', help='Use APIT Loss')
 parser.add_argument('--useDataParallel', action='store_true', help='Use DataParallel')
 parser.add_argument('-v', '--debug', default=False, action='store_true', help='Print debug spew.')
+
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
 parser.add_argument('--shuffle', action='store_true', required=False, help="Use shuffle dataset") # modified by shinjo 1120
 parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
 parser.add_argument('--warping', action='store_true', required=False, help="warping input imgs to target")
 parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
+parser.add_argument('--use_wandb', action='store_true', required=False, help="use wandb logger")
+parser.add_argument('--use_tensorboard', action='store_true', required=False, help="use tensorboard logger")
+parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
+parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
 
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
@@ -128,6 +131,9 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
 
             # Update weights
             optimizerD.step()
+
+            fakeOut = netD(fakeHR).mean()
+            fakeScrs.append(fakeOut)
 
         ################################################################################################################
         # (2) Update G network: minimize 1-D(G(z)) + Perception Loss + Image Loss + TV Loss
@@ -210,10 +216,11 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         #results['SSIM'].append(validationResults['SSIM'])
 
         # tensorboard に保存
-        writer.add_scalar("DLoss", results["DLoss"][-1], epoch)
-        writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
-        writer.add_scalar("DScore", results["DScore"][-1], epoch)
-        writer.add_scalar("GScore", results["GScore"][-1], epoch)
+        if writer:
+            writer.add_scalar("DLoss", results["DLoss"][-1], epoch)
+            writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
+            writer.add_scalar("DScore", results["DScore"][-1], epoch)
+            writer.add_scalar("GScore", results["GScore"][-1], epoch)
 
         if epoch % 1 == 0 and epoch != 0:
             out_path = 'statistics/'
@@ -233,8 +240,9 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         results['GLoss'].append(runningResults['GLoss'] / runningResults['batchSize'])
         results['GScore'].append(runningResults['GScore'] / runningResults['batchSize'])
 
-        writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
-        writer.add_scalar("GScore", results["GScore"][-1], epoch)
+        if writer:
+            writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
+            writer.add_scalar("GScore", results["GScore"][-1], epoch)
 
         if epoch % 1 == 0 and epoch != 0:
             out_path = 'statistics/'
@@ -251,24 +259,26 @@ def main():
 
     device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
 
-    writer = SummaryWriter(log_dir=args.log_dir)
-
     # Initialize Logger
     logger.initLogger(args.debug)
 
     # Load dataset
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
-                                 args.file_list, args.other_dataset, args.patch_size, args.future_frame, args.shuffle, args.denoise, args.warping, args.alignment) # modified by shinjo 1120
+                                 args.file_list, args.other_dataset, args.patch_size, args.future_frame, args.shuffle, args.denoise, args.warping, args.alignment, args.depth_img)
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
     # Use generator as RBPN
+    if args.depth_img:
+        num_channels = 1
+    else:
+        num_channels = args.num_channels
     if args.denoise:
-        netG = RBPN2(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+        netG = RBPN2(num_channels=num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
                 scale_factor=args.upscale_factor)
     else:
-        netG = RBPN(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+        netG = RBPN(num_channels=num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
                 scale_factor=args.upscale_factor)
     logger.info('# of Generator parameters: %s', sum(param.numel() for param in netG.parameters()))
 
@@ -310,18 +320,34 @@ def main():
     # print iSeeBetter architecture
     utils.printNetworkArch(netG, netD)
 
+    #W&B
+    if args.use_wandb:
+        import wandb 
+        wandb.init(project="afm-image_denoising", config=args)
+        wandb.watch(netG)
+    
+    # tensorboard
+    if args.use_tensorboard:
+        from torch.utils.tensorboard import SummaryWriter
+        writer = SummaryWriter(log_dir=args.log_dir)
+    else:
+        writer = None
+
     if args.pretrained:
         modelPath = os.path.join(args.save_folder + args.pretrained_sr)
         utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netG, modelPath=modelPath, device=device)
 
     for epoch in range(args.start_epoch, args.nEpochs + 1):
         runningResults = trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args)
+        if args.use_wandb:
+            wandb.log(runningResults)
 
         # if (epoch + 1) % (args.snapshots) == 0:
         if epoch % args.snapshots == 0: # shinjo
             # saveModelParams(epoch, runningResults, netG, netD, args.save_folder)
             saveModelParams(epoch, runningResults, netG, netD, args.save_folder, args.upscale_factor, writer)
-    writer.close()
+    if args.use_tensorboard:
+        writer.close()
 
 if __name__ == "__main__":
     main()

@@ -67,7 +67,7 @@ def load_img(filepath, nFrames, scale, other_dataset, upscale_only=False):
     return target, input, neigbor
 
 # shinjo modified 1120
-def load_img_future(filepath, nFrames, scale, other_dataset, shuffle, upscale_only=False):
+def load_img_future(filepath, nFrames, scale, other_dataset, shuffle, upscale_only):
     tt = int(nFrames/2)
     if other_dataset:
         if upscale_only:
@@ -113,6 +113,81 @@ def load_img_future(filepath, nFrames, scale, other_dataset, shuffle, upscale_on
                         temp = Image.open(file_name1).convert('RGB')
                     else:
                         temp = modcrop(Image.open(file_name1).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+                    neigbor.append(temp)
+                    neigbor_index.append(file_name1)
+                else:
+                    # print('neigbor frame- is not exist')
+                    temp=input
+                    neigbor.append(temp)
+                    neigbor_index.append(filepath)
+            
+    else:
+        if upscale_only:
+            target = Image.open(join(filepath,'im4.png')).convert('RGB')
+            input = target
+        else:
+            target = modcrop(Image.open(join(filepath,'im4.png')).convert('RGB'),scale)
+            input = target.resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+        neigbor = []
+        seq = [x for x in range(4-tt,5+tt) if x!=4]
+        #random.shuffle(seq) #if random sequence
+        for j in seq:
+            neigbor.append(modcrop(Image.open(filepath+'/im'+str(j)+'.png').convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC))
+    return target, input, neigbor, filepath, neigbor_index
+
+def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upscale_only):
+    tt = int(nFrames/2)
+    if other_dataset:
+        if upscale_only:
+            #target = Image.open(filepath).convert('RGB')
+            #input = target
+            gt_path = "/".join(filepath.split("/")[:-1]) + "/gt.npy"
+            # target = Image.open(gt_path).convert('RGB')
+            target = Image.fromarray(np.load(gt_path))
+            input = Image.fromarray(np.load(filepath))
+            # input = Image.open(filepath).convert('RGB')
+        else:
+            #target = modcrop(Image.open(filepath).convert('RGB'),scale)
+            #input = target.resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+            gt_path = "/".join(filepath.split("/")[:-1]) + "/gt.npy"
+            # target = Image.open(gt_path).convert('RGB')
+            # input = modcrop(Image.open(filepath).convert('RGB'),scale)
+            target = Image.fromarray(np.load(gt_path))
+            input = Image.fromarray(np.load(filepath))
+            input = Image.fromarray(input).resize((int(input.size[0]/scale),int(input.size[1]/scale)), Image.BICUBIC)
+            # input = input.resize((int(input.size[0]/scale),int(input.size[1]/scale)), Image.BICUBIC)
+        
+        char_len = len(filepath)
+        neigbor=[]
+        neigbor_index=[]
+        if shuffle: # add by shinjo 1120
+            split_path = filepath.split("/")
+            split_path[-1] = split_path[-1][:-7] + "[0-9][0-9][0-9].npy"
+            neigbor_index = [nfilepath for nfilepath in glob("/".join(split_path)) if nfilepath != filepath]
+            neigbor_index = sample(neigbor_index, min(nFrames-1, len(neigbor_index)))
+            if upscale_only:
+                neigbor = [Image.fromarray(np.load(nfilepath)) for nfilepath in neigbor_index]
+            else:
+                neigbor = [modcrop(Image.fromarray(np.load(nfilepath)), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC) for nfilepath in neigbor_index]
+            neigbor.extend([input for i in range(nFrames - 1 - len(neigbor))])
+            neigbor_index.extend([filepath for i in range(nFrames - 1 - len(neigbor))])
+        else:
+            if nFrames%2 == 0:
+                seq = [x for x in range(-tt,tt) if x!=0] # or seq = [x for x in range(-tt+1,tt+1) if x!=0]
+            else:
+                seq = [x for x in range(-tt,tt+1) if x!=0]
+            #random.shuffle(seq) #if random sequence
+            for i in seq:
+                index1 = int(filepath[char_len-7:char_len-4])+i
+                file_name1=filepath[0:char_len-7]+'{0:03d}'.format(index1)+'.npy'
+
+                if os.path.exists(file_name1):
+                    if upscale_only:
+                        #temp = Image.open(file_name1).convert('RGB')
+                        temp = Image.fromarray(np.load(file_name1))
+                    else:
+                        # temp = modcrop(Image.open(file_name1).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+                        temp = modcrop(Image.fromarray(np.load(file_name1))).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
                     neigbor.append(temp)
                     neigbor_index.append(file_name1)
                 else:
@@ -260,7 +335,7 @@ def rescale_img(img_in, scale):
     return img_in
 
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True, warping=False, alignment=False): # modified by shinjo 1120
+    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True, warping=False, alignment=False, depth_img=False):
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         #print(alist)
@@ -277,10 +352,14 @@ class DatasetFromFolder(data.Dataset):
         self.upscale_only = upscale_only
         self.warping = warping
         self.alignment = alignment
+        self.depth_img = depth_img
 
     def __getitem__(self, index):
         if self.future_frame:
-            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only) # modified by shinjo 1120
+            if not self.depth_img:
+                target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only) # modified by shinjo 1120
+            else:
+                target, input, neigbor, input_filepath, neigbor_filepath = load_img_future_depth(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only)
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
 

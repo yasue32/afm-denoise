@@ -145,8 +145,8 @@ class GeneratorLoss(nn.Module):
         # TV Loss
         tv_loss = self.tv_loss(hr_est)
 
-        return image_loss + 0.001 * adversarial_loss + 0.006 * perception_loss + 2e-8 * tv_loss
-
+        #return image_loss + 0.001 * adversarial_loss + 0.006 * perception_loss + 2e-8 * tv_loss
+        return image_loss + 0.001 * adversarial_loss
 
 class TVLoss(nn.Module):
     def __init__(self, tv_loss_weight=1):

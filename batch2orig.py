@@ -7,11 +7,12 @@ import time
 import glob
 from PIL import Image
 
-n_batch = 2
+n_batch = 4
 n_burst = 10
 
-sub = "/pretrained2x/211030/sep_trainlist_2x"
-load_filepath = "./Results/afm_dataset"
+load_filepath = "./Results"
+sub = "/scratch1x_patch4_warping/afm_dataset4/211109_2/sep_trainlist_1x"
+
 files = glob.glob(load_filepath + sub + "/*_RBPNF7.png")
 save_filepath = "./concat"
 os.makedirs(save_filepath + sub, exist_ok=True)

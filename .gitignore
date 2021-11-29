@@ -125,3 +125,5 @@ workspace*
 *.pt
 *.tif
 afm_dataset*
+*.npy
+wandb/*
