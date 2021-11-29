@@ -299,7 +299,7 @@ def get_patch(img_in, img_tar, img_nn, patch_size, scale, nFrames, ix=-1, iy=-1)
 
     return img_in, img_tar, img_nn, info_patch
 
-def augment(img_in, img_tar, img_nn, flip_h=True, rot=True, gamma=True):# modified by shinjo 1120
+def augment(img_in, img_tar, img_nn, flip_h=True, rot=True, gamma=True, depth_img=False):# modified by shinjo 1120
     info_aug = {'flip_h': False, 'flip_v': False, 'trans': False, 'gamma': False}
     
     if random.random() < 0.5 and flip_h:
@@ -320,7 +320,7 @@ def augment(img_in, img_tar, img_nn, flip_h=True, rot=True, gamma=True):# modifi
             img_nn = [j.rotate(180) for j in img_nn]
             info_aug['trans'] = True
 
-    if gamma: # modified by shinjo 1120
+    if gamma and (not depth_img): # modified by shinjo 1120
         img_in = Image.fromarray(u_gamma(np.array(img_in)).astype(np.uint8))
         img_tar = Image.fromarray(u_gamma(np.array(img_tar)).astype(np.uint8))
         img_nn = [Image.fromarray(u_gamma(np.array(j)).astype(np.uint8)) for j in img_nn]
@@ -367,7 +367,7 @@ class DatasetFromFolder(data.Dataset):
             input, target, neigbor, _ = get_patch(input,target,neigbor,self.patch_size, self.upscale_factor, self.nFrames)
         
         if self.data_augmentation:
-            input, target, neigbor, _ = augment(input, target, neigbor)
+            input, target, neigbor, _ = augment(input, target, neigbor, depth_img=self.depth_img)
 
         bicubic = rescale_img(input, self.upscale_factor)
 
