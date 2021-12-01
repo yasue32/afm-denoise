@@ -13,15 +13,15 @@ def transform():
     ])
 
 # modified by shinjo 1120
-def get_training_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, upscale_only, warping, alignment, depth_img):
+def get_training_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, upscale_only, warping, alignment, depth_img, optical_flow):
     print("Training samples chosen:", file_list)
     return DatasetFromFolder(data_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size,future_frame, shuffle,
-                             transform=transform(), upscale_only=upscale_only, warping=warping, alignment=alignment, depth_img=depth_img)
+                             transform=transform(), upscale_only=upscale_only, warping=warping, alignment=alignment, depth_img=depth_img, optical_flow=optical_flow)
 
-def get_eval_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, upscale_only, warping, alignment):
+def get_eval_set(data_dir, nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, upscale_only, warping, alignment, depth_img, optical_flow):
     return DatasetFromFolder(data_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size,future_frame,
-                             transform=transform(), upscale_only=upscale_only, warping=warping, alignment=alignment)
+                             transform=transform(), upscale_only=upscale_only, warping=warping, alignment=alignment, depth_img=depth_img, optical_flow=optical_flow)
 
-def get_test_set(data_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, upscale_only, warping, alignment):    
-    return DatasetFromFolderTest(data_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=transform(), upscale_only=upscale_only, warping=warping, alignment=alignment)
+def get_test_set(data_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, upscale_only, warping, alignment, depth_img, optical_flow):    
+    return DatasetFromFolderTest(data_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=transform(), upscale_only=upscale_only, warping=warping, alignment=alignment, depth_img=depth_img, optical_flow=optical_flow)
 

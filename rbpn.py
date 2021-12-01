@@ -34,6 +34,8 @@ class Net(nn.Module):
         #Initial Feature Extraction
         self.feat0 = ConvBlock(num_channels, base_filter, 3, 1, 1, activation='prelu', norm=None)
         self.feat1 = ConvBlock(8, base_filter, 3, 1, 1, activation='prelu', norm=None)
+        if num_channels==1:
+            self.feat1 = ConvBlock(4, base_filter, 3, 1, 1, activation='prelu', norm=None)
 
         ###DBPNS
         self.DBPN = DBPNS(base_filter, feat, num_stages, scale_factor)
@@ -146,7 +148,8 @@ class GeneratorLoss(nn.Module):
         tv_loss = self.tv_loss(hr_est)
 
         #return image_loss + 0.001 * adversarial_loss + 0.006 * perception_loss + 2e-8 * tv_loss
-        return image_loss + 0.001 * adversarial_loss
+        #return image_loss + 0.0005 * adversarial_loss
+        return image_loss + 0.006 * perception_loss 
 
 class TVLoss(nn.Module):
     def __init__(self, tv_loss_weight=1):

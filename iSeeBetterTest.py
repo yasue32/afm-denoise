@@ -41,6 +41,10 @@ parser.add_argument('-u', '--upscale_only', action='store_true', required=False,
 parser.add_argument('--denoise', action='store_true', required=False, help="denoise")
 parser.add_argument("--warping", action='store_true', required=False, help="warping input imgs")
 parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
+parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
+parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
+parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
+
 
 args = parser.parse_args()
 
@@ -59,16 +63,20 @@ if cuda:
     torch.cuda.manual_seed(args.seed)
 
 print('==> Loading datasets')
-test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment)
+test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, , args.depth_img, args.optical_flow)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 
 print('==> Building model ', args.model_type)
 if args.model_type == 'RBPN':
     if args.denoise:
-        model = RBPN2(num_channels=3, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
-                scale_factor=args.upscale_factor)
+        if not args.depth_img:
+            netG = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                    scale_factor=args.upscale_factor)
+        else:
+            netG = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                    scale_factor=args.upscale_factor)            
     else:
-        model = RBPN(num_channels=3, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
+        model = RBPN(num_channels=args.num_channels, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
 
 if cuda and len(gpus_list)>=2:
     model = torch.nn.DataParallel(model, device_ids=gpus_list)

@@ -143,8 +143,8 @@ def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upsc
             #input = target
             gt_path = "/".join(filepath.split("/")[:-1]) + "/gt.npy"
             # target = Image.open(gt_path).convert('RGB')
-            target = Image.fromarray(np.load(gt_path))
-            input = Image.fromarray(np.load(filepath))
+            target = Image.fromarray(np_load_int(gt_path))
+            input = Image.fromarray(np_load_int(filepath))
             # input = Image.open(filepath).convert('RGB')
         else:
             #target = modcrop(Image.open(filepath).convert('RGB'),scale)
@@ -152,8 +152,8 @@ def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upsc
             gt_path = "/".join(filepath.split("/")[:-1]) + "/gt.npy"
             # target = Image.open(gt_path).convert('RGB')
             # input = modcrop(Image.open(filepath).convert('RGB'),scale)
-            target = Image.fromarray(np.load(gt_path))
-            input = Image.fromarray(np.load(filepath))
+            target = Image.fromarray(np_load_int(gt_path))
+            input = Image.fromarray(np_load_int(filepath))
             input = Image.fromarray(input).resize((int(input.size[0]/scale),int(input.size[1]/scale)), Image.BICUBIC)
             # input = input.resize((int(input.size[0]/scale),int(input.size[1]/scale)), Image.BICUBIC)
         
@@ -166,9 +166,9 @@ def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upsc
             neigbor_index = [nfilepath for nfilepath in glob("/".join(split_path)) if nfilepath != filepath]
             neigbor_index = sample(neigbor_index, min(nFrames-1, len(neigbor_index)))
             if upscale_only:
-                neigbor = [Image.fromarray(np.load(nfilepath)) for nfilepath in neigbor_index]
+                neigbor = [Image.fromarray(np_load_int(nfilepath)) for nfilepath in neigbor_index]
             else:
-                neigbor = [modcrop(Image.fromarray(np.load(nfilepath)), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC) for nfilepath in neigbor_index]
+                neigbor = [modcrop(Image.fromarray(np_load_int(nfilepath)), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC) for nfilepath in neigbor_index]
             neigbor.extend([input for i in range(nFrames - 1 - len(neigbor))])
             neigbor_index.extend([filepath for i in range(nFrames - 1 - len(neigbor))])
         else:
@@ -184,10 +184,10 @@ def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upsc
                 if os.path.exists(file_name1):
                     if upscale_only:
                         #temp = Image.open(file_name1).convert('RGB')
-                        temp = Image.fromarray(np.load(file_name1))
+                        temp = Image.fromarray(np_load_int(file_name1))
                     else:
                         # temp = modcrop(Image.open(file_name1).convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
-                        temp = modcrop(Image.fromarray(np.load(file_name1))).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
+                        temp = modcrop(Image.fromarray(np_load_int(file_name1))).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC)
                     neigbor.append(temp)
                     neigbor_index.append(file_name1)
                 else:
@@ -209,6 +209,12 @@ def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upsc
         for j in seq:
             neigbor.append(modcrop(Image.open(filepath+'/im'+str(j)+'.png').convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC))
     return target, input, neigbor, filepath, neigbor_index
+
+def np_load_int(path):
+    array = np.load(path)
+    #array = np.array((array - array.min())/(array.max() - array.min())  * 256*4)
+    array = np.array(((array - array.min()) * 10**10))
+    return array
 
 def get_flow(im1, im2):
     im1 = np.array(im1)
@@ -335,7 +341,7 @@ def rescale_img(img_in, scale):
     return img_in
 
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True, warping=False, alignment=False, depth_img=False):
+    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True, warping=False, alignment=False, depth_img=False, optical_flow="s"):
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         #print(alist)
@@ -353,6 +359,7 @@ class DatasetFromFolder(data.Dataset):
         self.warping = warping
         self.alignment = alignment
         self.depth_img = depth_img
+        self.optical_flow = optical_flow
 
     def __getitem__(self, index):
         if self.future_frame:
@@ -371,8 +378,12 @@ class DatasetFromFolder(data.Dataset):
 
         bicubic = rescale_img(input, self.upscale_factor)
 
-        #flow = [get_flow(input,j) for j in neigbor]
-        flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+        if self.optical_flow == "s":
+            flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+        elif self.optical_flow == "p":
+            flow = [get_flow(input,j) for j in neigbor]
+        elif self.optical_flow == "n":
+            flow = [np.zeros((*np.array(input).shape, 2))] * (self.future_frame - 1) 
 
         if self.alignment:
             # print(input.size, neigbor[0].size)
@@ -380,9 +391,12 @@ class DatasetFromFolder(data.Dataset):
             neigbor = alignment.affine_align(target, neigbor)
             # print(input.shape, neigbor[0].shape)
 
+        # 入力画像に合わせてwarpingする
         if self.warping:
-            warped_input, warped_neigbor = warping_img(target, input, neigbor)
-            input = warped_input
+            # warped_input, warped_neigbor = warping_img(target, input, neigbor)
+            # input = warped_input
+            warped_target, warped_neigbor = warping_img(input, target, neigbor)
+            target = warped_target            
             neigbor = warped_neigbor            
 
         if self.transform:
@@ -398,7 +412,7 @@ class DatasetFromFolder(data.Dataset):
         return len(self.image_filenames)
 
 class DatasetFromFolderTest(data.Dataset):
-    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True, warping=False, alignment=False):
+    def __init__(self, image_dir, nFrames, upscale_factor, file_list, other_dataset, future_frame, transform=None, upscale_only=True, warping=False, alignment=False, depth_img=False, optical_flow="s"):
         super(DatasetFromFolderTest, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         self.image_filenames = [join(image_dir,x) for x in alist]
@@ -410,25 +424,39 @@ class DatasetFromFolderTest(data.Dataset):
         self.upscale_only = upscale_only
         self.warping = warping
         self.alignment = alignment
+        self.depth_img = depth_img
+        self.optical_flow = optical_flow
 
     def __getitem__(self, index):
+        # if self.future_frame:
+        #     target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, False, self.upscale_only) # modified by shinjo 1120
+        # else:
+        #     target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
         if self.future_frame:
-            target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, False, self.upscale_only) # modified by shinjo 1120
+            if not self.depth_img:
+                target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, False, self.upscale_only) # modified by shinjo 1120
+            else:
+                target, input, neigbor, input_filepath, neigbor_filepath = load_img_future_depth(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, False, self.upscale_only)
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
 
         bicubic = rescale_img(input, self.upscale_factor)
             
-        #flow = [get_flow(input,j) for j in neigbor]
-        flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+        if self.optical_flow == "s":
+            flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
+        elif self.optical_flow == "p":
+            flow = [get_flow(input,j) for j in neigbor]
+        elif self.optical_flow == "n":
+            flow = [np.zeros((*np.array(input).shape, 2))] * (self.future_frame - 1) 
 
         if self.alignment:
             neigbor = alignment.affine_align(input, neigbor)
 
         if self.warping:
-            _, warped_neigbor = warping_img(input, input, neigbor)
+            warped_target, warped_neigbor = warping_img(input, target, neigbor)
             # input = warped_input
             neigbor = warped_neigbor
+            target = warped_target
         
         if self.transform:
             target = self.transform(target)

@@ -61,7 +61,7 @@ parser.add_argument('--use_wandb', action='store_true', required=False, help="us
 parser.add_argument('--use_tensorboard', action='store_true', required=False, help="use tensorboard logger")
 parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
 parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
-
+parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
     trainBar = tqdm(training_data_loader)
@@ -201,11 +201,11 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         results = {'DLoss': [], 'GLoss': [], 'DScore': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
 
         # Save model parameters
-        torch.save(netG.state_dict(), 'weights/netG_epoch_%d_%d.pth' % (upscale_factor, epoch))
-        torch.save(netD.state_dict(), 'weights/netD_epoch_%d_%d.pth' % (upscale_factor, epoch))
+        torch.save(netG.state_dict(), pathG)
+        torch.save(netD.state_dict(), pathD)
 
-        logger.info("Checkpoint saved to {}".format('weights/netG_epoch_%d_%d.pth' % (upscale_factor, epoch)))
-        logger.info("Checkpoint saved to {}".format('weights/netD_epoch_%d_%d.pth' % (upscale_factor, epoch)))
+        logger.info("Checkpoint saved to {}".format(pathG))
+        logger.info("Checkpoint saved to {}".format(pathD))
 
         # Save Loss\Scores\PSNR\SSIM
         results['DLoss'].append(runningResults['DLoss'] / runningResults['batchSize'])
@@ -265,20 +265,21 @@ def main():
     # Load dataset
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
-                                 args.file_list, args.other_dataset, args.patch_size, args.future_frame, args.shuffle, args.denoise, args.warping, args.alignment, args.depth_img)
+                                 args.file_list, args.other_dataset, args.patch_size, args.future_frame, 
+                                 args.shuffle, args.denoise, args.warping, args.alignment, args.depth_img, args.optical_flow)
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
     # Use generator as RBPN
-    if args.depth_img:
-        num_channels = 1
-    else:
-        num_channels = args.num_channels
     if args.denoise:
-        netG = RBPN2(num_channels=num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
-                scale_factor=args.upscale_factor)
+        if not args.depth_img:
+            netG = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                    scale_factor=args.upscale_factor)
+        else:
+            netG = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                    scale_factor=args.upscale_factor)            
     else:
-        netG = RBPN(num_channels=num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+        netG = RBPN(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
                 scale_factor=args.upscale_factor)
     logger.info('# of Generator parameters: %s', sum(param.numel() for param in netG.parameters()))
 
@@ -336,6 +337,8 @@ def main():
     if args.pretrained:
         modelPath = os.path.join(args.save_folder + args.pretrained_sr)
         utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netG, modelPath=modelPath, device=device)
+
+    os.makedirs(args.save_folder, exist_ok=True)
 
     for epoch in range(args.start_epoch, args.nEpochs + 1):
         runningResults = trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args)
