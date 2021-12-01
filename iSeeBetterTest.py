@@ -63,17 +63,17 @@ if cuda:
     torch.cuda.manual_seed(args.seed)
 
 print('==> Loading datasets')
-test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, , args.depth_img, args.optical_flow)
+test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, args.depth_img, args.optical_flow)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 
 print('==> Building model ', args.model_type)
 if args.model_type == 'RBPN':
     if args.denoise:
         if not args.depth_img:
-            netG = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+            model = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
                     scale_factor=args.upscale_factor)
         else:
-            netG = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+            model = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
                     scale_factor=args.upscale_factor)            
     else:
         model = RBPN(num_channels=args.num_channels, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
