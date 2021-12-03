@@ -135,10 +135,13 @@ def cal_noise_level(flows, v=True):
 
     return noise_level_list
 
+def variance_of_laplacian(image):
+	# compute the Laplacian of the image and then return the focus
+	# measure, which is simply the variance of the Laplacian
+	return cv2.Laplacian(image, cv2.CV_64F).var()
 
 def save_img_and_flow(p, imgs, noise_level_list, flows, save_filepath, visualize=False):
     save_filepath = save_filepath + "/patch{:02}".format(p)
-    os.makedirs(save_filepath, exist_ok=True)
     n_burst = len(imgs)
     file_names = []
     flows = flows.permute(0,1,3,4,2)
@@ -151,11 +154,16 @@ def save_img_and_flow(p, imgs, noise_level_list, flows, save_filepath, visualize
 
     # gt
     n = noise_level_list[0]
+    fm = variance_of_laplacian(imgs[n[1]])
     pil_img = Image.fromarray(imgs[n[1]]).convert("L")
+    if fm < 300 or 1500 < fm or 1800<n[0]:
+        return None
+    os.makedirs(save_filepath, exist_ok=True)
+    # file_name = f"gt-b{int(fm)}-n{int(n[0])}.png"
     file_name = "gt.png"
     pil_img.save(save_filepath + "/" + file_name)
     flow = flows[n[1]]
-    torch.save(flow, save_filepath+"/"+"gt.pt")
+    # torch.save(flow, save_filepath+"/"+"gt.pt")
     del noise_level_list[0]
 
     # input
@@ -163,11 +171,13 @@ def save_img_and_flow(p, imgs, noise_level_list, flows, save_filepath, visualize
     # ノイズが少ない順にindexをふって保存する
     for i, n in enumerate(noise_level_list):
         pil_img = Image.fromarray(imgs[n[1]]).convert("L")
+        fm = variance_of_laplacian(imgs[n[1]])
+        # file_name = f"in-b{int(fm)}-n{int(n[0])}.png"
         file_name = "input{:03}.png".format(i)
         pil_img.save(save_filepath + "/" + file_name)
         file_names.append(filepath_index + "/" + file_name)
         flow = flows[n[1]]
-        torch.save(flow, save_filepath+"/"+"input{:03}.pt".format(i))
+        # torch.save(flow, save_filepath+"/"+"input{:03}.pt".format(i))
 
         if visualize:
             flow_norm = torch.norm(flows[n[1]], dim=-1)
@@ -222,6 +232,8 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
             noise_level_list = cal_noise_level(flows)
             file_names = save_img_and_flow(j, patch, noise_level_list, 
                         flows, save_filepath+"/"+sub_dir+"/set{:04}".format(i), visualize=True)
+            if type(file_names) == type(None):
+                continue
 
             # 21xxxxの中のindex
             with open(save_filepath + "/" + sub_dir + "/sep_trainlist.txt", mode='a') as f:
@@ -246,25 +258,25 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
                             flag = 0
                         f.write(sub_dir+"/"+file_names[n])
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-n_patch = 2
+os.environ["CUDA_VISIBLE_DEVICES"] = "9"
+n_patch = 4
 load_filename = "orig_img"
-save_filepath = f"afm_dataset{n_patch}"
+save_filepath = f"afm_dataset{n_patch}_blur"
 
 # main(load_filename, "20211109_2", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=False)
 
-#main("orig_img", "210923", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211022", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211023", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211029", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211030", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211106", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211108", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211109", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211112", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211115", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211116", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211122", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211126", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+# main("orig_img", "210923", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211022", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211023", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211029", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211030", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211106", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211108", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211109", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211112", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211115", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211116", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211122", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211126", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 
-main(load_filename, "20211126", save_filepath=save_filepaths, kernel_size=7, n_patch=n_patch,write_all_index=false)
+# main(load_filename, "20211112", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=False)

@@ -69,6 +69,7 @@ def load_img(filepath, nFrames, scale, other_dataset, upscale_only=False):
 # shinjo modified 1120
 def load_img_future(filepath, nFrames, scale, other_dataset, shuffle, upscale_only):
     tt = int(nFrames/2)
+    filepath = "/".join(filepath.split("/")[:-1] + ["input000.png"]) # 000(きれいな画像)をinputに
     if other_dataset:
         if upscale_only:
             #target = Image.open(filepath).convert('RGB')
@@ -376,7 +377,10 @@ class DatasetFromFolder(data.Dataset):
         if self.data_augmentation:
             input, target, neigbor, _ = augment(input, target, neigbor, depth_img=self.depth_img)
 
-        bicubic = rescale_img(input, self.upscale_factor)
+        if self.upscale_only:
+            bicubic = rescale_img(input, 1)
+        else:
+            bicubic = rescale_img(input, self.upscale_factor)
 
         if self.optical_flow == "s":
             flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)

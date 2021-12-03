@@ -1,8 +1,8 @@
 #train
 #2x
-python3 iSeeBetterTrain.py --upscale_factor 2 --RBPN_only --other_dataset True --data_dir ~/../../home-local/yasue/dataset/afm_dataset4 --file_list sep_trainlist.txt --patch_size 0 --batchSize 25 --save_folder weights/pretrained2x_mse_Pflow/ --gpu_id 0 --gpus 1 --denoise --pretrained --use_wandb --shuffle --optical_flow p
-#1x APITLoss
-python3 iSeeBetterTrain.py --upscale_factor 1 --other_dataset True --data_dir afm_dataset4 --file_list sep_trainlist.txt --patch_size 0 --batchSize 25 --useDataParallel --save_folder weights/ --gpu_id 1 --gpus 1 --denoise --shuffle --APITLoss --pretrained --pretrained_sr netG_epoch_1_60.pth --use_wandb --alignment
+python3 iSeeBetterTrain.py --upscale_factor 2 --RBPN_only --other_dataset True --data_dir ./../../../../../home-local/yasue/dataset/afm_dataset4 --file_list sep_trainlist.txt --patch_size 0 --batchSize 16 --denoise --save_folder weights/pretrained2x_mse/ --gpu_id 0 --gpus 1 --pretrained --use_wandb --shuffle --optical_flow p
+#1x RBPN only
+python3 iSeeBetterTrain.py --upscale_factor 1 --other_dataset True --data_dir afm_dataset4 --file_list sep_trainlist.txt --patch_size 0 --batchSize 12 --useDataParallel --save_folder weights/ --gpu_id 4 --gpus 1 --denoise --shuffle --RBPN_only --pretrained --pretrained_sr netG_epoch_1_60.pth --alignment
 #1x depth
 python3 iSeeBetterTrain.py --upscale_factor 1 --other_dataset True --data_dir afm_dataset_depth4 --file_list sep_trainlist.txt --patch_size 0 --batchSize 16 --useDataParallel --save_folder weights/scratch1x_patch4_depth/ --gpu_id 8,9 --gpus 2 --denoise --shuffle --RBPN_only --depth_img
 

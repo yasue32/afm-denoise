@@ -62,6 +62,7 @@ parser.add_argument('--use_tensorboard', action='store_true', required=False, he
 parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
 parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
 parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
+#parser.add_argument('--pretrained_dc', default="", help='pretrained Discriminator model')
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
     trainBar = tqdm(training_data_loader)
@@ -266,7 +267,7 @@ def main():
     logger.info('==> Loading datasets')
     train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
                                  args.file_list, args.other_dataset, args.patch_size, args.future_frame, 
-                                 args.shuffle, args.denoise, args.warping, args.alignment, args.depth_img, args.optical_flow)
+                                 args.shuffle, (args.denoise), args.warping, args.alignment, args.depth_img, args.optical_flow)
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
@@ -337,6 +338,11 @@ def main():
     if args.pretrained:
         modelPath = os.path.join(args.save_folder + args.pretrained_sr)
         utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netG, modelPath=modelPath, device=device)
+
+    #yasue
+    # if args.pretrained_dc and not args.RBPN_only:
+    #     modelPath = os.path.join(args.save_folder + "netD" + args.pretrained_sr[4:])
+    #     utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netD, modelPath=modelPath, device=device)
 
     os.makedirs(args.save_folder, exist_ok=True)
 
