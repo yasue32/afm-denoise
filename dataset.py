@@ -211,6 +211,17 @@ def load_img_future_depth(filepath, nFrames, scale, other_dataset, shuffle, upsc
             neigbor.append(modcrop(Image.open(filepath+'/im'+str(j)+'.png').convert('RGB'), scale).resize((int(target.size[0]/scale),int(target.size[1]/scale)), Image.BICUBIC))
     return target, input, neigbor, filepath, neigbor_index
 
+def load_img_future_random(filepath, nFrames):
+    random_path = filepath[:-5] + "[0-9].png"
+    neigbor_index = [nfilepath for nfilepath in glob(random_path)]
+    #neigbor_index = sample(neigbor_index, min(nFrames-1, len(neigbor_index)))
+    neigbor_index.append(filepath)
+
+    neigbor = [Image.open(nfilepath).convert('RGB') for nfilepath in neigbor_index]
+    neigbor.extend([input for i in range(nFrames - 1 - len(neigbor))])
+    return neigbor
+
+
 def np_load_int(path):
     array = np.load(path)
     #array = np.array((array - array.min())/(array.max() - array.min())  * 256*4)
@@ -341,8 +352,29 @@ def rescale_img(img_in, scale):
     img_in = img_in.resize(new_size_in, resample=Image.BICUBIC)
     return img_in
 
+def get_gt(imgs, nFrames):
+    noise_list = [[0,i] for i in range(len(imgs))]
+    for i in range(len(imgs)):
+        for j in range(i, len(img)):
+            flow = get_flow(i,j)
+            noise = np.var(flow[:,:,0])+ np.var(flow[:,:,1])
+            noise_list[i,0] = noise
+            noise_list[j,0] = noise
+    noise_list=sorted(noise_list)
+    target=imgs[noise_list[0][1]]
+    less_noise_imgs=[target]
+    for n,i in noise_list:
+        if n < 1800: ###hard cording th
+            less_noise_imgs.append(imgs[i]) 
+    input=imgs[noise_list[1][1]]
+    neigbor_list=sample(noise_list[1:],nFrames)
+    neigbor_listr=sorted(neigbor)
+    input=imgs[neigbor_list[0][1]]
+    neigbor=[imgs[i[1]] for i in neigbor_list[1:]]
+    return target, input, neigbor, less_noise_imgs
+
 class DatasetFromFolder(data.Dataset):
-    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True, warping=False, alignment=False, depth_img=False, optical_flow="s"):
+    def __init__(self, image_dir,nFrames, upscale_factor, data_augmentation, file_list, other_dataset, patch_size, future_frame, shuffle, transform=None, upscale_only=True, warping=False, alignment=False, depth_img=False, optical_flow="s", random_crop=False):
         super(DatasetFromFolder, self).__init__()
         alist = [line.rstrip() for line in open(join(image_dir,file_list))]
         #print(alist)
@@ -361,19 +393,26 @@ class DatasetFromFolder(data.Dataset):
         self.alignment = alignment
         self.depth_img = depth_img
         self.optical_flow = optical_flow
+        self.random_crop = random_crop
 
     def __getitem__(self, index):
-        if self.future_frame:
-            if not self.depth_img:
-                target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only) # modified by shinjo 1120
+        if self.random_crop==0:
+            if self.future_frame:
+                if self.depth_img==False:
+                    target, input, neigbor, input_filepath, neigbor_filepath = load_img_future(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only) # modified by shinjo 1120
+                else:
+                    target, input, neigbor, input_filepath, neigbor_filepath = load_img_future_depth(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only)
             else:
-                target, input, neigbor, input_filepath, neigbor_filepath = load_img_future_depth(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.shuffle, self.upscale_only)
-        else:
-            target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
+                target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset)
 
-        if self.patch_size != 0:
-            input, target, neigbor, _ = get_patch(input,target,neigbor,self.patch_size, self.upscale_factor, self.nFrames)
-        
+            if self.patch_size != 0:
+                input, target, neigbor, _ = get_patch(input,target,neigbor,self.patch_size, self.upscale_factor, self.nFrames)
+        else:
+            # for AFM_dataset
+            neigbor = load_img_future_random(self.image_filenames[index], self.nFrames) # self.shuffule
+            neigbor_patch = get_patch(neigbor[0],neigbor[1],neigbor,self.random_crop, 1, self.nFrames)
+            target, input, neigbor, less_noise_imgs = get_gt(neigbor, self.nFrames)
+
         if self.data_augmentation:
             input, target, neigbor, _ = augment(input, target, neigbor, depth_img=self.depth_img)
 
@@ -386,8 +425,9 @@ class DatasetFromFolder(data.Dataset):
             flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
         elif self.optical_flow == "p":
             flow = [get_flow(input,j) for j in neigbor]
+            # print(len(flow))
         elif self.optical_flow == "n":
-            flow = [np.zeros((*np.array(input).shape, 2))] * (self.future_frame - 1) 
+            flow = [np.zeros((np.array(input).shape[0], np.array(input).shape[1], 2)) for i in range(len(neigbor)) ]
 
         if self.alignment:
             # print(input.size, neigbor[0].size)
@@ -444,14 +484,17 @@ class DatasetFromFolderTest(data.Dataset):
         else:
             target, input, neigbor = load_img(self.image_filenames[index], self.nFrames, self.upscale_factor, self.other_dataset, self.upscale_only)
 
-        bicubic = rescale_img(input, self.upscale_factor)
+        if self.upscale_only:
+            bicubic = rescale_img(input, 1)
+        else:
+            bicubic = rescale_img(input, self.upscale_factor)
             
         if self.optical_flow == "s":
             flow = get_sift_flow(input_filepath, neigbor_filepath, input, neigbor)
         elif self.optical_flow == "p":
             flow = [get_flow(input,j) for j in neigbor]
         elif self.optical_flow == "n":
-            flow = [np.zeros((*np.array(input).shape, 2))] * (self.future_frame - 1) 
+            flow = [np.zeros((np.array(input).shape[0], np.array(input).shape[1], 2)) for i in range(len(neigbor)) ]
 
         if self.alignment:
             neigbor = alignment.affine_align(input, neigbor)

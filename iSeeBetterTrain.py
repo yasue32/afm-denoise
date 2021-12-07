@@ -33,7 +33,7 @@ parser.add_argument('--gpu_mode', type=bool, default=True)
 parser.add_argument('--threads', type=int, default=8, help='number of threads for data loader to use')
 parser.add_argument('--seed', type=int, default=123, help='random seed to use. Default=123')
 parser.add_argument('--gpus', default=1, type=int, help='number of gpu')
-parser.add_argument('--gpu_id', default="0", type=str, help='id of gpu') # shinjo modified
+parser.add_argument('--gpu_id', default="", type=str, help='not using') # shinjo modified
 parser.add_argument('--data_dir', type=str, default='./vimeo_septuplet/sequences')
 parser.add_argument('--file_list', type=str, default='sep_trainlist.txt')
 parser.add_argument('--other_dataset', type=bool, default=False, help="use other dataset than vimeo-90k")
@@ -62,9 +62,12 @@ parser.add_argument('--use_tensorboard', action='store_true', required=False, he
 parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
 parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
 parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
-#parser.add_argument('--pretrained_dc', default="", help='pretrained Discriminator model')
+parser.add_argument('--pretrained_d', default="", help='pretrained Discriminator model')
+parser.add_argument('--random_crop', type=int, default=0, help='0 to use original frame size (for AFM project)')
 
 def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
+    torch.autograd.set_detect_anomaly(True)
+
     trainBar = tqdm(training_data_loader)
     runningResults = {'batchSize': 0, 'DLoss': 0, 'GLoss': 0, 'DScore': 0, 'GScore': 0}
 
@@ -75,6 +78,23 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
     # Skip first iteration
     iterTrainBar = iter(trainBar)
     next(iterTrainBar)
+
+    if args.useDataParallel:
+        G_parameters = list(netG.module.parameters())
+        if netD:
+            try:
+                D_parameters = list(netD.module.parameters())
+            except:
+                D_parameters = list(netD.parameters())
+
+    else:
+        G_parameters = list(netG.parameters())
+        if netD:
+            try:
+                D_parameters = list(netD.parameters())
+            except:
+                D_parameters = list(netD.module.parameters())
+    
 
     for data in iterTrainBar:
         batchSize = len(data)
@@ -90,10 +110,7 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
         realScrs = []
 
         DLoss = 0
-
-        # Zero-out gradients, i.e., start afresh
-        if netD: # shinjo modified
-            netD.zero_grad()
+         
 
         input, target, neigbor, flow, bicubic = data[0], data[1], data[2], data[3], data[4]
         if args.gpu_mode and torch.cuda.is_available():
@@ -113,66 +130,117 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
         if args.residual:
             fakeHR = fakeHR + bicubic
 
-        if netD: # shinjo modified
+        if netD:
+            netD.zero_grad()
+            
             realOut = netD(target).mean()
             fakeOut = netD(fakeHR).mean()
+            DLoss = fakeOut - realOut
 
-            if args.APITLoss:
-                fakeHRs.append(fakeHR)
-                targets.append(target)
-            fakeScrs.append(fakeOut)
-            realScrs.append(realOut)
+            DLoss.backward(retain_graph=True, inputs=D_parameters)
 
-            DLoss += 1 - realOut + fakeOut
-
-            DLoss /= len(data)
-
-            # Calculate gradients
-            DLoss.backward(retain_graph=True)
-
-            # Update weights
-            optimizerD.step()
-
-            fakeOut = netD(fakeHR).mean()
-            fakeScrs.append(fakeOut)
-
-        ################################################################################################################
-        # (2) Update G network: minimize 1-D(G(z)) + Perception Loss + Image Loss + TV Loss
-        ################################################################################################################
-        GLoss = 0
-
-        # Zero-out gradients, i.e., start afresh
         netG.zero_grad()
-
         if args.APITLoss:
-            if not netD: # shinjo modified
-                raise Exception("If you use APITLoss, please run without --RBPN_only")
-            idx = 0
-            for fakeHR, fake_scr, HRImg in zip(fakeHRs, fakeScrs, targets):
-                fakeHR = fakeHR.to(device)
-                fake_scr = fake_scr.to(device)
-                HRImg = HRImg.to(device)
-                GLoss += generatorCriterion(fake_scr, fakeHR, HRImg, idx)
-                idx += 1
+            assert netD is not None
+            fakeOut = netD(fakeHR).mean()
+            GLoss = generatorCriterion(fakeOut, fakeHR, target, 0)
+
         else:
+            assert netD is None
             GLoss = generatorCriterion(fakeHR, target)
 
-        GLoss /= len(data)
-
-        # Calculate gradients
-        GLoss.backward()
-
-        # Update weights
+        GLoss.backward(inputs=G_parameters)
+        if netD is not None:
+            optimizerD.step()
         optimizerG.step()
 
-        realOut = torch.Tensor(realScrs).mean()
-        fakeOut = torch.Tensor(fakeScrs).mean()
+        if netD is not None:
+            realScrs.append(realOut)
+            fakeScrs.append(fakeOut)
+        
+        
+        # fakeHR = netG(input, neigbor, flow)
+        # if args.residual:
+        #     fakeHR = fakeHR + bicubic
+
+        # if netD: # shinjo modified
+        #     realOut = netD(target).mean()
+        #     DLoss_real = (0.5 - realOut) / len(data)
+        #     # DLoss_real.backward(retain_graph = True)
+
+        #     fakeOut = netD(fakeHR).mean()
+        #     DLoss_fake = (0.5 + fakeOut) / len(data)
+        #     # DLoss_fake.backward(retain_graph = False)
+
+        #     DLoss = DLoss_fake + DLoss_real
+        #     DLoss.backward()
+
+        #     # realOut = netD(target).mean()
+        #     # fakeOut = netD(fakeHR).mean()
+
+        #     # DLoss_real = -realOut
+        #     # DLoss_fake = fakeOut
+
+        #     if args.APITLoss:
+        #         fakeHRs.append(fakeHR)
+        #         targets.append(target)
+        #     fakeScrs.append(fakeOut)
+        #     realScrs.append(realOut)
+
+        #     # DLoss = DLoss + 1 - realOut + fakeOut
+        #     # DLoss = DLoss / len(data)
+            
+
+        #     # Calculate gradients
+            
+        #     # DLoss = DLoss_fake + DLoss_real
+        #     # DLoss.backward(retain_graph=True) # default: True
+ 
+        #     # Update weights
+        #     optimizerD.step()
+            
+        #     fakeSrcs = []
+        #     fakeOut = netD(fakeHR).mean()
+        #     fakeScrs.append(fakeOut)
+
+        # ################################################################################################################
+        # # (2) Update G network: minimize 1-D(G(z)) + Perception Loss + Image Loss + TV Loss
+        # ################################################################################################################
+        # GLoss = 0
+
+        # # Zero-out gradients, i.e., start afresh
+        # netG.zero_grad()
+
+        # if args.APITLoss:
+        #     if not netD: # shinjo modified
+        #         raise Exception("If you use APITLoss, please run without --RBPN_only")
+        #     idx = 0
+
+        #     for fakeHR, fake_scr, HRImg in zip(fakeHRs, fakeScrs, targets):
+        #         fakeHR = fakeHR.to(device)
+        #         fake_scr = fake_scr.to(device)
+        #         HRImg = HRImg.to(device)
+        #         GLoss += generatorCriterion(fake_scr, fakeHR, HRImg, idx)
+        #         idx += 1
+        # else:
+        #     GLoss = generatorCriterion(fakeHR, target)
+
+        # GLoss = GLoss / len(data)
+
+        # # Calculate gradients
+        # GLoss.backward()
+
+        # # Update weights
+        # optimizerG.step()
+
         runningResults['GLoss'] += GLoss.item() * args.batchSize
-        runningResults['GScore'] += fakeOut.item() * args.batchSize
 
         if netD:
+            realOut = torch.Tensor(realScrs).mean()
+            fakeOut = torch.Tensor(fakeScrs).mean()
             runningResults['DLoss'] += DLoss.item() * args.batchSize
             runningResults['DScore'] += realOut.item() * args.batchSize
+            runningResults['GScore'] += fakeOut.item() * args.batchSize
 
             trainBar.set_description(desc='[Epoch: %d/%d] G Loss: %.4f' %
                                     (epoch, args.nEpochs, runningResults['GLoss'] / runningResults['batchSize']))
@@ -258,16 +326,23 @@ def main():
     #os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     gpus_list =  list(map(int, args.gpu_id.split(",")))
 
-    device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
+    #device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
+    device = torch.device("cuda" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
+    if args.gpu_id != "":
+        print("use CUDA_VISIBLE_DEVICES={}".format(args.gpu_id))
 
     # Initialize Logger
     logger.initLogger(args.debug)
 
     # Load dataset
     logger.info('==> Loading datasets')
-    train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
-                                 args.file_list, args.other_dataset, args.patch_size, args.future_frame, 
-                                 args.shuffle, (args.denoise), args.warping, args.alignment, args.depth_img, args.optical_flow)
+    # train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
+    #                              args.file_list, args.other_dataset, args.patch_size, args.future_frame, 
+    #                              args.shuffle, (args.denoise), args.warping, args.alignment, args.depth_img, args.optical_flow, args.random_crop)
+    
+    from dataset_akita import TrainDataset
+    train_set = TrainDataset(args.data_dir, args.nFrames)
+    
     training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
                                       shuffle=True)
 
@@ -291,6 +366,9 @@ def main():
     # Use discriminator from SRGAN
     if not args.RBPN_only: # shinjo modified
         netD = Discriminator()
+        if args.pretrained_d != "":
+            modelPath = os.path.join(args.save_folder + args.pretrained_d)
+            utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netD, modelPath=modelPath, device=device)
         logger.info('# of Discriminator parameters: %s', sum(param.numel() for param in netD.parameters()))
     else:
         netD = None
