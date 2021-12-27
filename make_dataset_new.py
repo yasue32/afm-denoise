@@ -1,7 +1,7 @@
 # coding: UTF-8
 ### GPU 指定
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "8"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 ### import 
@@ -38,7 +38,8 @@ def read_imgs(load_filepath, load_filename, index,image_resize_factor = 1, gamma
         pil_img = pil_img.point(gamma045LUT)
 
     print(index)
-    imgs = [cv2.imread(load_filepath+"/"+load_filename.format(i)) for i in index]
+    #imgs = [cv2.imread(load_filepath+"/"+load_filename.format(i)) for i in index]
+    imgs = [cv2.imread(i) for i in index]
     #print([load_filepath+"/"+load_filename.format(i) for i in index])
     imgs = [cv2.resize(im, (im.shape[1]//image_resize_factor, im.shape[0]//image_resize_factor)) for im in imgs]
     print("img size: ", imgs[0].shape)
@@ -111,7 +112,7 @@ def cal_flow(model, imgs, kernel_size=8):
     return flows
 
 
-def cal_noise_level(flows, v=True):
+def cal_noise_level(flows):
     #flow[10,10,2,128,128]を受け取って、ノイズレベルを返す
     # [[noise0, index0],[noise1, index1],...] 
     n_burst = len(flows)
@@ -214,7 +215,8 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
         pass
 
     for i in range(n_set):
-        index = list(range(i*n_burst, (i+1)*n_burst))
+        #index = list(range(i*n_burst, (i+1)*n_burst))
+        index = files[i*n_burst:(i+1)*n_burst]
         imgs = read_imgs(load_filepath+"/"+sub_dir, file_name, index)
         patches = make_patch(imgs,n_patch=n_patch)
         for j, patch in enumerate(patches):
@@ -246,18 +248,18 @@ def main(load_filepath, sub_dir, save_filepath="afm_dataset", write_all_index=Fa
                             flag = 0
                         f.write(sub_dir+"/"+file_names[n])
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-n_patch = 2
-load_filename = "orig_img"
-save_filepath = f"afm_dataset{n_patch}"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+n_patch = 4
+load_filename = "dirty"
+save_filepath = f"dirty_dataset{n_patch}"
 
 # main(load_filename, "20211109_2", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=False)
 
 #main("orig_img", "210923", save_filepath=f"afm_dataset{n_patch}", kernel_size=7, n_patch=n_patch,write_all_index=True)
 # main(load_filename, "20211022", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 # main(load_filename, "20211023", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211029", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
-# main(load_filename, "20211030", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211029", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
+main(load_filename, "20211030", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 # main(load_filename, "20211106", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 # main(load_filename, "20211108", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 # main(load_filename, "20211109", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
@@ -267,4 +269,4 @@ save_filepath = f"afm_dataset{n_patch}"
 # main(load_filename, "20211122", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 # main(load_filename, "20211126", save_filepath=save_filepath, kernel_size=7, n_patch=n_patch,write_all_index=True)
 
-main(load_filename, "20211126", save_filepath=save_filepaths, kernel_size=7, n_patch=n_patch,write_all_index=false)
+# main(load_filename, "20211126", save_filepath=save_filepaths, kernel_size=7, n_patch=n_patch,write_all_index=false)

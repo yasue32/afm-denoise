@@ -127,3 +127,4 @@ workspace*
 afm_dataset*
 *.npy
 wandb/*
+*.jpg

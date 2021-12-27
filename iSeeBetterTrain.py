@@ -1,24 +1,29 @@
 import argparse
 import gc
 import os
+
 import pandas as pd
+# import torch.multiprocessing as mp
+import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
-from tqdm import tqdm
-from data import get_training_set
-import logger
-from rbpn import Net as RBPN
-from rbpn import Net2 as RBPN2
-from rbpn import GeneratorLoss
-from SRGAN.model import Discriminator
-import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-import utils
+from tqdm import tqdm
+import random
 
-################################################## iSEEBETTER TRAINER KNOBS ############################################
-#upscale_factor = 4
-########################################################################################################################
+import logger
+import utils
+# from data import get_training_set
+from dbpns import Net as DBPNS
+from rbpn import GeneratorLoss
+from rbpn import Net as RBPN
+from rbpn import Net2 as RBPN2
+from SRGAN.model import Discriminator
+
+# ################################################# iSEEBETTER TRAINER KNOB
+# upscale_factor = 4
+# #########################################################################
 
 # Handle command line arguments
 parser = argparse.ArgumentParser(description='Train iSeeBetter: Super Resolution Models')
@@ -33,7 +38,7 @@ parser.add_argument('--gpu_mode', type=bool, default=True)
 parser.add_argument('--threads', type=int, default=8, help='number of threads for data loader to use')
 parser.add_argument('--seed', type=int, default=123, help='random seed to use. Default=123')
 parser.add_argument('--gpus', default=1, type=int, help='number of gpu')
-parser.add_argument('--gpu_id', default="", type=str, help='not using') # shinjo modified
+parser.add_argument('--gpu_id', default="", type=str, help='not using')
 parser.add_argument('--data_dir', type=str, default='./vimeo_septuplet/sequences')
 parser.add_argument('--file_list', type=str, default='sep_trainlist.txt')
 parser.add_argument('--other_dataset', type=bool, default=False, help="use other dataset than vimeo-90k")
@@ -53,7 +58,7 @@ parser.add_argument('-v', '--debug', default=False, action='store_true', help='P
 
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
-parser.add_argument('--shuffle', action='store_true', required=False, help="Use shuffle dataset") # modified by shinjo 1120
+parser.add_argument('--shuffle', action='store_true', required=False, help="Use shuffle dataset")
 parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
 parser.add_argument('--warping', action='store_true', required=False, help="warping input imgs to target")
 parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
@@ -63,16 +68,31 @@ parser.add_argument('--num_channels', type=int, default=3, help="channels of img
 parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
 parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
 parser.add_argument('--pretrained_d', default="", help='pretrained Discriminator model')
-parser.add_argument('--random_crop', type=int, default=0, help='0 to use original frame size (for AFM project)')
+# parser.add_argument('--random_crop', type=int, default=0, help='0 to use original frame size (for AFM project)')
 
-def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args):
+
+def trainModel(
+        epoch,
+        training_data_loader,
+        netG,
+        netD,
+        optimizerD,
+        optimizerG,
+        generatorCriterion,
+        device,
+        args):
     torch.autograd.set_detect_anomaly(True)
 
     trainBar = tqdm(training_data_loader)
-    runningResults = {'batchSize': 0, 'DLoss': 0, 'GLoss': 0, 'DScore': 0, 'GScore': 0}
+    runningResults = {
+        'batchSize': 0,
+        'DLoss': 0,
+        'GLoss': 0,
+        'DScore': 0,
+        'GScore': 0}
 
     netG.train()
-    if netD: # shinjo modified
+    if netD:  # shinjo modified
         netD.train()
 
     # Skip first iteration
@@ -84,7 +104,7 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
         if netD:
             try:
                 D_parameters = list(netD.module.parameters())
-            except:
+            except BaseException:
                 D_parameters = list(netD.parameters())
 
     else:
@@ -92,50 +112,59 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
         if netD:
             try:
                 D_parameters = list(netD.parameters())
-            except:
+            except BaseException:
                 D_parameters = list(netD.module.parameters())
-    
 
     for data in iterTrainBar:
         batchSize = len(data)
         runningResults['batchSize'] += batchSize
 
-        ################################################################################################################
+        #######################################################################
         # (1) Update D network: maximize D(x)-1-D(G(z))
-        ################################################################################################################
-        if args.APITLoss:
-            fakeHRs = []
-            targets = []
+        #######################################################################
+
+        # if args.APITLoss:
+        #     fakeHRs = []
+        #     targets = []
         fakeScrs = []
         realScrs = []
 
         DLoss = 0
-         
 
-        input, target, neigbor, flow, bicubic = data[0], data[1], data[2], data[3], data[4]
+        input, target, neigbor, flow, bicubic, good_img = data[0], data[1], data[2], data[3], data[4], data[5]
         if args.gpu_mode and torch.cuda.is_available():
-            input = Variable(input).to(device) # shinjo modified
+            input = Variable(input).to(device)  # shinjo modified
             target = Variable(target).to(device)
             bicubic = Variable(bicubic).to(device)
             neigbor = [Variable(j).to(device) for j in neigbor]
+            realHR = Variable(good_img).to(device)
             flow = [Variable(j).to(device).float() for j in flow]
         else:
             input = Variable(input).to(device=device, dtype=torch.float)
             target = Variable(target).to(device=device, dtype=torch.float)
             bicubic = Variable(bicubic).to(device=device, dtype=torch.float)
-            neigbor = [Variable(j).to(device=device, dtype=torch.float) for j in neigbor]
-            flow = [Variable(j).to(device=device, dtype=torch.float) for j in flow]
-
-        fakeHR = netG(input, neigbor, flow)
+            neigbor = [
+                Variable(j).to(
+                    device=device,
+                    dtype=torch.float) for j in neigbor]
+            realHR = Variable(realHR).to(device=device, dtype=torch.float)
+            flow = [Variable(j).to(device=device, dtype=torch.float)
+                    for j in flow]
+        if args.nFrames == 1:
+            fakeHR = netG(input)  # 20211208
+        else:
+            fakeHR = netG(input, neigbor, flow)
         if args.residual:
             fakeHR = fakeHR + bicubic
 
         if netD:
             netD.zero_grad()
-            
-            realOut = netD(target).mean()
+
+            # realOut = netD(target).mean()
+            # print(realHR.shape, fakeHR.shape, target.shape)
+            realOut = netD(realHR).mean()
             fakeOut = netD(fakeHR).mean()
-            DLoss = fakeOut - realOut
+            DLoss = (fakeOut - realOut)
 
             DLoss.backward(retain_graph=True, inputs=D_parameters)
 
@@ -157,8 +186,7 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
         if netD is not None:
             realScrs.append(realOut)
             fakeScrs.append(fakeOut)
-        
-        
+
         # fakeHR = netG(input, neigbor, flow)
         # if args.residual:
         #     fakeHR = fakeHR + bicubic
@@ -189,16 +217,15 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
 
         #     # DLoss = DLoss + 1 - realOut + fakeOut
         #     # DLoss = DLoss / len(data)
-            
 
         #     # Calculate gradients
-            
+
         #     # DLoss = DLoss_fake + DLoss_real
         #     # DLoss.backward(retain_graph=True) # default: True
- 
+
         #     # Update weights
         #     optimizerD.step()
-            
+
         #     fakeSrcs = []
         #     fakeOut = netD(fakeHR).mean()
         #     fakeScrs.append(fakeOut)
@@ -242,14 +269,22 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
             runningResults['DScore'] += realOut.item() * args.batchSize
             runningResults['GScore'] += fakeOut.item() * args.batchSize
 
-            trainBar.set_description(desc='[Epoch: %d/%d] G Loss: %.4f' %
-                                    (epoch, args.nEpochs, runningResults['GLoss'] / runningResults['batchSize']))
+            trainBar.set_description(
+                desc='[Epoch: %d/%d] G Loss: %.4f' %
+                (epoch, args.nEpochs, runningResults['GLoss'] / runningResults['batchSize']))
         else:
-            trainBar.set_description(desc='[Epoch: %d/%d] D Loss: %.4f G Loss: %.4f D(x): %.4f D(G(z)): %.4f' %
-                                        (epoch, args.nEpochs, runningResults['DLoss'] / runningResults['batchSize'],
-                                        runningResults['GLoss'] / runningResults['batchSize'],
-                                        runningResults['DScore'] / runningResults['batchSize'],
-                                        runningResults['GScore'] / runningResults['batchSize']))
+            trainBar.set_description(
+                desc='[Epoch: %d/%d] D Loss: %.4f G Loss: %.4f D(x): %.4f D(G(z)): %.4f' %
+                (epoch,
+                 args.nEpochs,
+                 runningResults['DLoss'] /
+                 runningResults['batchSize'],
+                 runningResults['GLoss'] /
+                 runningResults['batchSize'],
+                 runningResults['DScore'] /
+                 runningResults['batchSize'],
+                 runningResults['GScore'] /
+                 runningResults['batchSize']))
         gc.collect()
 
     netG.eval()
@@ -258,16 +293,35 @@ def trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, 
     if (epoch + 1) % (args.nEpochs / 2) == 0:
         for param_group in optimizerG.param_groups:
             param_group['lr'] /= 10.0
-        logger.info('Learning rate decay: lr=%s', (optimizerG.param_groups[0]['lr']))
+        logger.info(
+            'Learning rate decay: lr=%s',
+            (optimizerG.param_groups[0]['lr']))
 
     return runningResults
 
 
-def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_factor, writer):
-    pathG = os.path.join(save_folder, 'netG_epoch_%d_%d.pth' % (upscale_factor, epoch)) # shinjo
-    pathD = os.path.join(save_folder, 'netD_epoch_%d_%d.pth' % (upscale_factor, epoch))
-    if netD: # shinjo modified
-        results = {'DLoss': [], 'GLoss': [], 'DScore': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
+def saveModelParams(
+        epoch,
+        runningResults,
+        netG,
+        netD,
+        save_folder,
+        upscale_factor,
+        writer):
+    pathG = os.path.join(
+        save_folder, 'netG_epoch_%d_%d.pth' %
+        (upscale_factor, epoch))  # shinjo
+    pathD = os.path.join(
+        save_folder, 'netD_epoch_%d_%d.pth' %
+        (upscale_factor, epoch))
+    if netD:  # shinjo modified
+        results = {
+            'DLoss': [],
+            'GLoss': [],
+            'DScore': [],
+            'GScore': [],
+            'PSNR': [],
+            'SSIM': []}
 
         # Save model parameters
         torch.save(netG.state_dict(), pathG)
@@ -277,12 +331,20 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         logger.info("Checkpoint saved to {}".format(pathD))
 
         # Save Loss\Scores\PSNR\SSIM
-        results['DLoss'].append(runningResults['DLoss'] / runningResults['batchSize'])
-        results['GLoss'].append(runningResults['GLoss'] / runningResults['batchSize'])
-        results['DScore'].append(runningResults['DScore'] / runningResults['batchSize'])
-        results['GScore'].append(runningResults['GScore'] / runningResults['batchSize'])
-        #results['PSNR'].append(validationResults['PSNR'])
-        #results['SSIM'].append(validationResults['SSIM'])
+        results['DLoss'].append(
+            runningResults['DLoss'] /
+            runningResults['batchSize'])
+        results['GLoss'].append(
+            runningResults['GLoss'] /
+            runningResults['batchSize'])
+        results['DScore'].append(
+            runningResults['DScore'] /
+            runningResults['batchSize'])
+        results['GScore'].append(
+            runningResults['GScore'] /
+            runningResults['batchSize'])
+        # results['PSNR'].append(validationResults['PSNR'])
+        # results['SSIM'].append(validationResults['SSIM'])
 
         # tensorboard に保存
         if writer:
@@ -294,9 +356,14 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         if epoch % 1 == 0 and epoch != 0:
             out_path = 'statistics/'
             data_frame = pd.DataFrame(data={'DLoss': results['DLoss'], 'GLoss': results['GLoss'], 'DScore': results['DScore'],
-                                    'GScore': results['GScore']},#, 'PSNR': results['PSNR'], 'SSIM': results['SSIM']},
-                                    index=range(1, epoch + 1))
-            data_frame.to_csv(out_path + 'iSeeBetter_' + str(upscale_factor) + '_Train_Results.csv', index_label='Epoch')
+                                            'GScore': results['GScore']},  # , 'PSNR': results['PSNR'], 'SSIM': results['SSIM']},
+                                      index=range(1, epoch + 1))
+            data_frame.to_csv(
+                out_path +
+                'iSeeBetter_' +
+                str(upscale_factor) +
+                '_Train_Results.csv',
+                index_label='Epoch')
     else:
         results = {'GLoss': [], 'GScore': [], 'PSNR': [], 'SSIM': []}
 
@@ -306,8 +373,12 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
         logger.info("Checkpoint saved to {}".format(pathG))
 
         # Save Loss\Scores\PSNR\SSIM
-        results['GLoss'].append(runningResults['GLoss'] / runningResults['batchSize'])
-        results['GScore'].append(runningResults['GScore'] / runningResults['batchSize'])
+        results['GLoss'].append(
+            runningResults['GLoss'] /
+            runningResults['batchSize'])
+        results['GScore'].append(
+            runningResults['GScore'] /
+            runningResults['batchSize'])
 
         if writer:
             writer.add_scalar("GLoss", results["GLoss"][-1], epoch)
@@ -315,21 +386,35 @@ def saveModelParams(epoch, runningResults, netG, netD, save_folder, upscale_fact
 
         if epoch % 1 == 0 and epoch != 0:
             out_path = 'statistics/'
-            data_frame = pd.DataFrame(data={'GLoss': results['GLoss'], 'GScore': results['GScore']}, index=range(1, epoch + 1))
-            data_frame.to_csv(out_path + 'iSeeBetter_' + str(upscale_factor) + '_Train_Results.csv', index_label='Epoch')
+            data_frame = pd.DataFrame(
+                data={
+                    'GLoss': results['GLoss'],
+                    'GScore': results['GScore']},
+                index=range(
+                    1,
+                    epoch + 1))
+            data_frame.to_csv(
+                out_path +
+                'iSeeBetter_' +
+                str(upscale_factor) +
+                '_Train_Results.csv',
+                index_label='Epoch')
+
 
 def main():
     """ Lets begin the training process! """
 
     args = parser.parse_args()
 
-    #os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-    gpus_list =  list(map(int, args.gpu_id.split(",")))
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+    gpus_list = list(range(args.gpus))
 
-    #device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
-    device = torch.device("cuda" if torch.cuda.is_available() and args.gpu_mode else "cpu") # shinjo modified
+    # device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available()
+    # and args.gpu_mode else "cpu") # shinjo modified
+    device = torch.device("cuda" if torch.cuda.is_available(
+    ) and args.gpu_mode else "cpu")  # shinjo modified
     if args.gpu_id != "":
-        print("use CUDA_VISIBLE_DEVICES={}".format(args.gpu_id))
+        print("*** use CUDA_VISIBLE_DEVICES={} *** ".format(args.gpu_id))
 
     # Initialize Logger
     logger.initLogger(args.debug)
@@ -337,75 +422,111 @@ def main():
     # Load dataset
     logger.info('==> Loading datasets')
     # train_set = get_training_set(args.data_dir, args.nFrames, args.upscale_factor, args.data_augmentation,
-    #                              args.file_list, args.other_dataset, args.patch_size, args.future_frame, 
-    #                              args.shuffle, (args.denoise), args.warping, args.alignment, args.depth_img, args.optical_flow, args.random_crop)
-    
+    #                              args.file_list, args.other_dataset, args.patch_size, args.future_frame,
+    # args.shuffle, (args.denoise), args.warping, args.alignment,
+    # args.depth_img, args.optical_flow, args.random_crop)
+
     from dataset_akita import TrainDataset
-    train_set = TrainDataset(args.data_dir, args.nFrames)
-    
-    training_data_loader = DataLoader(dataset=train_set, num_workers=args.threads, batch_size=args.batchSize,
-                                      shuffle=True)
+    train_set = TrainDataset(args.data_dir, args.nFrames, train=True, noise_flow_type=args.optical_flow)
+
+    training_data_loader = DataLoader(
+        dataset=train_set,
+        num_workers=args.threads,
+        batch_size=args.batchSize,
+        shuffle=True)
 
     # Use generator as RBPN
-    if args.denoise:
-        if not args.depth_img:
-            netG = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+    if args.nFrames == 1:
+        netG = DBPNS(base_filter=3, feat=3, num_stages=3,
+                     scale_factor=args.upscale_factor)  # 20211208
+    else:
+        if args.denoise:
+            if not args.depth_img:
+                netG = RBPN2(
+                    num_channels=args.num_channels,
+                    base_filter=256,
+                    feat=64,
+                    num_stages=3,
+                    n_resblock=5,
+                    nFrames=args.nFrames,
+                    scale_factor=args.upscale_factor)
+            else:
+                netG = RBPN2(
+                    num_channels=1,
+                    base_filter=256,
+                    feat=64,
+                    num_stages=3,
+                    n_resblock=5,
+                    nFrames=args.nFrames,
                     scale_factor=args.upscale_factor)
         else:
-            netG = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
-                    scale_factor=args.upscale_factor)            
-    else:
-        netG = RBPN(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+            netG = RBPN(
+                num_channels=args.num_channels,
+                base_filter=256,
+                feat=64,
+                num_stages=3,
+                n_resblock=5,
+                nFrames=args.nFrames,
                 scale_factor=args.upscale_factor)
-    logger.info('# of Generator parameters: %s', sum(param.numel() for param in netG.parameters()))
+    logger.info('# of Generator parameters: %s', sum(param.numel()
+                for param in netG.parameters()))
 
     # Use DataParallel?
     if args.useDataParallel:
         netG = torch.nn.DataParallel(netG, device_ids=gpus_list)
 
     # Use discriminator from SRGAN
-    if not args.RBPN_only: # shinjo modified
+    if not args.RBPN_only:  # shinjo modified
         netD = Discriminator()
         if args.pretrained_d != "":
             modelPath = os.path.join(args.save_folder + args.pretrained_d)
-            utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netD, modelPath=modelPath, device=device)
-        logger.info('# of Discriminator parameters: %s', sum(param.numel() for param in netD.parameters()))
+            utils.loadPreTrainedModel(
+                gpuMode=args.gpu_mode,
+                model=netD,
+                modelPath=modelPath,
+                device=device)
+        logger.info('# of Discriminator parameters: %s',
+                    sum(param.numel() for param in netD.parameters()))
     else:
         netD = None
 
     # Generator loss
     generatorCriterion = nn.L1Loss() if not args.APITLoss else GeneratorLoss()
 
-
     if args.gpu_mode and torch.cuda.is_available():
         utils.printCUDAStats()
-        netG = netG.to(device) # shinjo modified
-        if not args.RBPN_only: # shinjo modified
+        netG = netG.to(device)  # shinjo modified
+        if not args.RBPN_only:  # shinjo modified
             netD = netD.to(device)
 
         generatorCriterion = generatorCriterion.to(device)
 
     # Use Adam optimizer
-    optimizerG = optim.Adam(netG.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-8)
-    if not args.RBPN_only: # shinjo modified
-        optimizerD = optim.Adam(netD.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-8)
+    optimizerG = optim.Adam(
+        netG.parameters(), lr=args.lr, betas=(
+            0.9, 0.999), eps=1e-8)
+    if not args.RBPN_only:  # shinjo modified
+        optimizerD = optim.Adam(
+            netD.parameters(), lr=args.lr, betas=(
+                0.9, 0.999), eps=1e-8)
     else:
         optimizerD = None
 
     if args.APITLoss:
-        logger.info("Generator Loss: Adversarial Loss + Perception Loss + Image Loss + TV Loss")
+        logger.info(
+            "Generator Loss: Adversarial Loss + Perception Loss + Image Loss + TV Loss")
     else:
         logger.info("Generator Loss: L1 Loss")
 
     # print iSeeBetter architecture
     utils.printNetworkArch(netG, netD)
 
-    #W&B
+    # W&B
     if args.use_wandb:
-        import wandb 
+        import wandb
         wandb.init(project="afm-image_denoising", config=args)
         wandb.watch(netG)
-    
+
     # tensorboard
     if args.use_tensorboard:
         from torch.utils.tensorboard import SummaryWriter
@@ -415,26 +536,43 @@ def main():
 
     if args.pretrained:
         modelPath = os.path.join(args.save_folder + args.pretrained_sr)
-        utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netG, modelPath=modelPath, device=device)
-
-    #yasue
-    # if args.pretrained_dc and not args.RBPN_only:
-    #     modelPath = os.path.join(args.save_folder + "netD" + args.pretrained_sr[4:])
-    #     utils.loadPreTrainedModel(gpuMode=args.gpu_mode, model=netD, modelPath=modelPath, device=device)
+        utils.loadPreTrainedModel(
+            gpuMode=args.gpu_mode,
+            model=netG,
+            modelPath=modelPath,
+            device=device)
 
     os.makedirs(args.save_folder, exist_ok=True)
 
     for epoch in range(args.start_epoch, args.nEpochs + 1):
-        runningResults = trainModel(epoch, training_data_loader, netG, netD, optimizerD, optimizerG, generatorCriterion, device, args)
+        runningResults = trainModel(
+            epoch,
+            training_data_loader,
+            netG,
+            netD,
+            optimizerD,
+            optimizerG,
+            generatorCriterion,
+            device,
+            args)
         if args.use_wandb:
             wandb.log(runningResults)
 
         # if (epoch + 1) % (args.snapshots) == 0:
-        if epoch % args.snapshots == 0: # shinjo
+        if epoch % args.snapshots == 0:  # shinjo
             # saveModelParams(epoch, runningResults, netG, netD, args.save_folder)
-            saveModelParams(epoch, runningResults, netG, netD, args.save_folder, args.upscale_factor, writer)
+            saveModelParams(
+                epoch,
+                runningResults,
+                netG,
+                netD,
+                args.save_folder,
+                args.upscale_factor,
+                writer)
     if args.use_tensorboard:
         writer.close()
 
+
 if __name__ == "__main__":
+    # mp.set_start_method('spawn')
     main()

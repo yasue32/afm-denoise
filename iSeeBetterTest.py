@@ -7,6 +7,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from rbpn import Net as RBPN
 from rbpn import Net2 as RBPN2
+from dbpns import Net as DBPNS
 from data import get_test_set
 import numpy as np
 import utils
@@ -18,8 +19,8 @@ import logger
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
 parser.add_argument('-m', '--model', default="weights/netG_epoch_4_1.pth", help="Model")
-#parser.add_argument('-m', '--model', default="weights/netG_epoch_4_1.pth", help="Model")
-#parser.add_argument('-m', '--model', default="weights/RBPN_4x.pth", help="Model")
+# parser.add_argument('-m', '--model', default="weights/netG_epoch_4_1.pth", help="Model")
+# parser.add_argument('-m', '--model', default="weights/RBPN_4x.pth", help="Model")
 parser.add_argument('-o', '--output', default='Results/', help="Location to save test results")
 parser.add_argument('-s', '--upscale_factor', type=int, default=4, help="Super-Resolution Scale Factor")
 parser.add_argument('-r', '--residual', action='store_true', required=False, help="")
@@ -63,11 +64,13 @@ if cuda:
     torch.cuda.manual_seed(args.seed)
 
 print('==> Loading datasets')
-test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, args.depth_img, args.optical_flow)
+# test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, args.depth_img, args.optical_flow)
+from dataset_akita import TrainDataset
+test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.optical_flow)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 
 print('==> Building model ', args.model_type)
-if args.model_type == 'RBPN':
+if args.nFrames != 1:
     if args.denoise:
         if not args.depth_img:
             model = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
@@ -77,6 +80,10 @@ if args.model_type == 'RBPN':
                     scale_factor=args.upscale_factor)            
     else:
         model = RBPN(num_channels=args.num_channels, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
+elif args.nFrames == 1:
+    model = DBPNS(base_filter=3, feat=3, num_stages=3, scale_factor=args.upscale_factor)
+
+
 
 if cuda and len(gpus_list)>=2:
     model = torch.nn.DataParallel(model, device_ids=gpus_list)
@@ -105,7 +112,7 @@ def eval():
     if not upscale_only:
         avg_psnr_predicted = 0.0
     for batch in testing_data_loader:
-        input, target, neigbor, flow, bicubic = batch[0], batch[1], batch[2], batch[3], batch[4]
+        input, target, neigbor, flow, bicubic, _ = batch[0], batch[1], batch[2], batch[3], batch[4], batch[5]
         
         with torch.no_grad():
             if cuda:
@@ -125,8 +132,11 @@ def eval():
                 prediction = chop_forward(input, neigbor, flow, model, args.upscale_factor)
         else:
             with torch.no_grad():
-                prediction = model(input, neigbor, flow)
-        
+                if args.nFrames != 1:
+                    prediction = model(input, neigbor, flow)
+                else:
+                    prediction = model(input)
+
         if args.residual:
             prediction = prediction + bicubic
             
@@ -221,5 +231,6 @@ def chop_forward(x, neigbor, flow, model, scale, shave=8, min_size=2000, nGPUs=a
 
     return output
 
-##Eval Start!!!!
+
+## Eval Start!!!!
 eval()
