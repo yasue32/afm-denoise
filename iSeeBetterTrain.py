@@ -33,7 +33,7 @@ parser.add_argument('--testBatchSize', type=int, default=5, help='testing batch 
 parser.add_argument('--start_epoch', type=int, default=1, help='Starting epoch for continuing training')
 parser.add_argument('--nEpochs', type=int, default=150, help='number of epochs to train for')
 parser.add_argument('--snapshots', type=int, default=1, help='Snapshots')
-parser.add_argument('--lr', type=float, default=1e-4, help='Learning Rate. Default=0.01')
+parser.add_argument('--lr', type=float, default=1e-4, help='Learning Rate. Default=1e-4')
 parser.add_argument('--gpu_mode', type=bool, default=True)
 parser.add_argument('--threads', type=int, default=8, help='number of threads for data loader to use')
 parser.add_argument('--seed', type=int, default=123, help='random seed to use. Default=123')
@@ -66,9 +66,11 @@ parser.add_argument('--use_wandb', action='store_true', required=False, help="us
 parser.add_argument('--use_tensorboard', action='store_true', required=False, help="use tensorboard logger")
 parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
 parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
-parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
+parser.add_argument('--optical_flow', type=str, default="p", help="p=pyflow, n=noting")
 parser.add_argument('--pretrained_d', default="", help='pretrained Discriminator model')
+parser.add_argument('--noise_flow_type', type=str, default="p", help="s=sift_flow, p=filter")
 # parser.add_argument('--random_crop', type=int, default=0, help='0 to use original frame size (for AFM project)')
+parser.add_argument("--aloss", default=0.005, help="weights of adversarial loss")
 
 
 def trainModel(
@@ -427,7 +429,8 @@ def main():
     # args.depth_img, args.optical_flow, args.random_crop)
 
     from dataset_akita import TrainDataset
-    train_set = TrainDataset(args.data_dir, args.nFrames, train=True, noise_flow_type=args.optical_flow)
+    train_set = TrainDataset(args.data_dir, args.nFrames, 
+        train=True, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
 
     training_data_loader = DataLoader(
         dataset=train_set,
@@ -491,7 +494,7 @@ def main():
         netD = None
 
     # Generator loss
-    generatorCriterion = nn.L1Loss() if not args.APITLoss else GeneratorLoss()
+    generatorCriterion = nn.L1Loss() if not args.APITLoss else GeneratorLoss(args.aloss)
 
     if args.gpu_mode and torch.cuda.is_available():
         utils.printCUDAStats()

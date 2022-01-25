@@ -127,15 +127,17 @@ class Net2(Net):
 
 
 class GeneratorLoss(nn.Module):
-    def __init__(self):
-        super(GeneratorLoss, self).__init__()
+    def __init__(self, aloss=0.005):
+        super(GeneratorLoss, self).__init__(aloss)
         vgg = vgg16(pretrained=True)
         loss_network = nn.Sequential(*list(vgg.features)[:31]).eval()
         for param in loss_network.parameters():
             param.requires_grad = False
         self.loss_network = loss_network
         self.mse_loss = nn.MSELoss()
+        self.L1_loss = nn.L1Loss()
         self.tv_loss = TVLoss()
+        self.aloss = aloss
 
     def forward(self, out_labels, hr_est, hr_img, idx):
         # Adversarial Loss
@@ -144,12 +146,13 @@ class GeneratorLoss(nn.Module):
         # Perception Loss
         perception_loss = self.mse_loss(self.loss_network(hr_est), self.loss_network(hr_img))
         # Image Loss
-        image_loss = self.mse_loss(hr_est, hr_img)
+        # image_loss = self.mse_loss(hr_est, hr_img)
+        image_loss = self.L1_loss(hr_est, hr_img)
         # TV Loss
         tv_loss = self.tv_loss(hr_est)
 
         #return image_loss + 0.001 * adversarial_loss + 0.006 * perception_loss + 2e-8 * tv_loss
-        return image_loss + 0.0005 * adversarial_loss
+        return image_loss + self.aloss * adversarial_loss
         # return image_loss + 0.006 * perception_loss 
 
 class TVLoss(nn.Module):

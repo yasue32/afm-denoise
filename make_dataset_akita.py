@@ -12,12 +12,12 @@ from tqdm import tqdm
 device=torch.device('cuda')
 
 #DATA_DIR = 'ext_clean_img'
-DATA_DIR = "test_imgs"
-SAVE_DIR = 'test_dataset_per_sequence'
+DATA_DIR = "ext_clean_img"
+SAVE_DIR = 'ext_clean_dataset_per_sequence_nopt'
 test_flag = True
 
 sift_flow = SiftFlowTorch(
-    cell_size=2,
+    cell_size=1,
     step_size=1,
     is_boundary_included=False,
     num_bins=8,
@@ -106,10 +106,10 @@ for pathes in tqdm(zip(*[iter(sorted(glob.glob(os.path.join(DATA_DIR, '**/*.png'
         imgs.append(cv2.imread(save_path))
 
     # imgs = [cv2.imread(i) for i in index]
-    flows = cal_flow(sift_flow, imgs, kernel_size=7)
-    # print(flows.shape)
-    for index, path in enumerate(pathes):
-        save_path = os.path.join(save_dir, str(index).zfill(4)+".pt")
-        torch.save(flows[index], save_path)
+    # flows = cal_flow(sift_flow, imgs, kernel_size=15)
+    # # print(flows.shape)
+    # for index, path in enumerate(pathes):
+    #     save_path = os.path.join(save_dir, str(index).zfill(4)+".pt")
+    #     torch.save(flows[index], save_path)
 
     i += 1

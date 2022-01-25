@@ -44,8 +44,10 @@ parser.add_argument("--warping", action='store_true', required=False, help="warp
 parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
 parser.add_argument('--num_channels', type=int, default=3, help="channels of img")
 parser.add_argument('--depth_img', action='store_true', required=False, help="when use depth(numpy.npy) img")
-parser.add_argument('--optical_flow', type=str, default="s", help="s=sift_flow, p=pyflow, n=noting")
+parser.add_argument('--optical_flow', type=str, default="p", help="s=sift_flow, p=pyflow, n=noting")
+parser.add_argument('--noise_flow_type', type=str, default="p", help="s=sift_flow, p=filter")
 
+parser.add_argument('--patch_size', type=int, default=64, help='0 to use original frame size')
 
 args = parser.parse_args()
 
@@ -66,7 +68,7 @@ if cuda:
 print('==> Loading datasets')
 # test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, args.depth_img, args.optical_flow)
 from dataset_akita import TrainDataset
-test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.optical_flow)
+test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 
 print('==> Building model ', args.model_type)
