@@ -24,7 +24,7 @@ random.seed(346)
 
 class TrainDataset(Dataset):
     def __init__(self, data_dir, nFrames, train=True, noise_flow_type="p", optical_flow="p", patch_size=64, warping=False):
-
+        self.noisy_inputs = False
         if train:
             # self.sequence_dirs = [os.path.join(
             #     data_dir, x) for x in os.listdir(data_dir)]
@@ -32,11 +32,7 @@ class TrainDataset(Dataset):
                 [os.path.join(data_dir, x)] * 16 for x in os.listdir(data_dir)]
             self.sequence_dirs = list(
                 itertools.chain.from_iterable(self.sequence_dirs))
-
-            
             self.crop = RandomCrop(size=int(patch_size))
-            self.noisy_inputs = False
-
             if noise_flow_type == "s":  # s as sift-flow
                 self.noise_threshold = 0.01
                 self.blur_threshold_lower = 250
@@ -160,13 +156,13 @@ class TrainDataset(Dataset):
                 if self.noisy_inputs:
                     cropped_img = deepcopy(cropped_img[noise_inds[:8]])
                     images = deepcopy(images[noise_inds[:8]])
-                    print(images.shape)
+                    # print(images.shape)
                     (blur_inds, blur_scores), (noise_inds, noise_scores) = self.calc_scores(
                         cropped_img, cropped_flow, filepath)
             
             elif self.train == True:
                 cropped_img, cropped_flow = self.crop(deepcopy(images),np.zeros((10, 10, images[0].shape[0], images[0].shape[1], 2)), self.noise_flow_type)
-                # print(cropped_img)
+                # print(cropped_img.shape, cropped_img)
                 (blur_inds, blur_scores), (noise_inds, noise_scores) = self.calc_scores(cropped_img, cropped_flow, filepath)
 
 
@@ -701,10 +697,10 @@ if __name__ == '__main__':
     device = 'cuda'
 
     # dataset = TrainDataset('afm_dataset_per_sequence', 3)
-    dataset = TrainDataset('ext_clean_dataset_per_sequence', 7, train=True, noise_flow_type="p", optical_flow="p", warping=True)
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=1)
+    dataset = TrainDataset('afm_dataset_per_sequence', 9, train=False, noise_flow_type="p", optical_flow="p", patch_size=64, warping=False)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=1)
 
-    save_dir = 'threshold_dicision1'
+    save_dir = 'threshold_dicision2'
 
     def save_torch_img(img, path):
         img = img.numpy().transpose(1, 2, 0)*255
@@ -725,6 +721,8 @@ if __name__ == '__main__':
             # all_cat = torch.cat([input[b]] + [target[b]] + neigbor[b])
             # save_torch_img(input[b], os.path.join(
             #     save_dir, str(i).zfill(4) + '.png'))
-            save_torch_img(neigbor_cat, os.path.join(
-                save_dir, str(i).zfill(4) + '_clean_dirty.png'))
+            # save_torch_img(neigbor_cat, os.path.join(
+            #     save_dir, str(i).zfill(4) + '_clean_dirty.png'))
+            save_torch_img(input[b], os.path.join(
+                save_dir, str(i).zfill(4) + '.png'))
             i += 1

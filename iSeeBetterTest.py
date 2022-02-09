@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from rbpn import Net as RBPN
 from rbpn import Net2 as RBPN2
 from dbpns import Net as DBPNS
+from UNet import UNet16
 from data import get_test_set
 import numpy as np
 import utils
@@ -15,6 +16,7 @@ import time
 import cv2
 import math
 import logger
+import itertools
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
@@ -36,7 +38,7 @@ parser.add_argument('--file_list', type=str, default="foliage_test.txt")
 parser.add_argument('--other_dataset', type=bool, default=True, help="Use a dataset that isn't vimeo-90k")
 parser.add_argument('--future_frame', type=bool, default=True, help="Use future frame")
 parser.add_argument('--nFrames', type=int, default=7, help="")
-parser.add_argument('--model_type', type=str, default="RBPN", help="")
+parser.add_argument('--model_type', type=str, default="RBPN", help="RBPN or UNet")
 parser.add_argument('-d', '--debug', action='store_true', required=False, help="Print debug spew.")
 parser.add_argument('-u', '--upscale_only', action='store_true', required=False, help="Upscale mode - without downscaling.")
 parser.add_argument('--denoise', action='store_true', required=False, help="denoise")
@@ -48,6 +50,8 @@ parser.add_argument('--optical_flow', type=str, default="p", help="s=sift_flow, 
 parser.add_argument('--noise_flow_type', type=str, default="p", help="s=sift_flow, p=filter")
 
 parser.add_argument('--patch_size', type=int, default=64, help='0 to use original frame size')
+parser.add_argument('--all_patarn', action='store_true', required=False, help="test all patarn. if nFrames=4, nBurst=10 then testPatarn=9C4=126 for 1seq")
+
 
 args = parser.parse_args()
 
@@ -68,22 +72,30 @@ if cuda:
 print('==> Loading datasets')
 # test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, args.depth_img, args.optical_flow)
 from dataset_akita import TrainDataset
-test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
+if args.all_patarn:
+    test_set = TrainDataset(args.data_dir, 9, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
+else:
+    test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
+
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 
 print('==> Building model ', args.model_type)
-if args.nFrames != 1:
-    if args.denoise:
-        if not args.depth_img:
-            model = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
-                    scale_factor=args.upscale_factor)
+if args.model_type == "UNet":
+        model = UNet16(num_classes=3, num_filters=32, 
+            pretrained=True, up_sampling_method="deconv")
+elif args.model_type == "RBPN":
+    if args.nFrames != 1:
+        if args.denoise:
+            if not args.depth_img:
+                model = RBPN2(num_channels=args.num_channels, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                        scale_factor=args.upscale_factor)
+            else:
+                model = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
+                        scale_factor=args.upscale_factor)            
         else:
-            model = RBPN2(num_channels=1, base_filter=256, feat=64, num_stages=3, n_resblock=5, nFrames=args.nFrames,
-                    scale_factor=args.upscale_factor)            
-    else:
-        model = RBPN(num_channels=args.num_channels, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
-elif args.nFrames == 1:
-    model = DBPNS(base_filter=3, feat=3, num_stages=3, scale_factor=args.upscale_factor)
+            model = RBPN(num_channels=args.num_channels, base_filter=256,  feat = 64, num_stages=3, n_resblock=5, nFrames=args.nFrames, scale_factor=args.upscale_factor)
+    elif args.nFrames == 1:
+        model = DBPNS(base_filter=3, feat=3, num_stages=3, scale_factor=args.upscale_factor)
 
 
 
@@ -114,57 +126,71 @@ def eval():
     if not upscale_only:
         avg_psnr_predicted = 0.0
     for batch in testing_data_loader:
-        input, target, neigbor, flow, bicubic, _ = batch[0], batch[1], batch[2], batch[3], batch[4], batch[5]
-        
-        with torch.no_grad():
-            if cuda:
-                input = Variable(input).cuda(gpus_list[0])
-                bicubic = Variable(bicubic).cuda(gpus_list[0])
-                neigbor = [Variable(j).cuda(gpus_list[0]) for j in neigbor]
-                flow = [Variable(j).cuda(gpus_list[0]).float() for j in flow]
-            else:
-                input = Variable(input).to(device=device, dtype=torch.float)
-                bicubic = Variable(bicubic).to(device=device, dtype=torch.float)
-                neigbor = [Variable(j).to(device=device, dtype=torch.float) for j in neigbor]
-                flow = [Variable(j).to(device=device, dtype=torch.float) for j in flow]
-
-        t0 = time.time()
-        if args.chop_forward:
-            with torch.no_grad():
-                prediction = chop_forward(input, neigbor, flow, model, args.upscale_factor)
+        input_, target_, neigbor_, flow_, bicubic_, _ = batch[0], batch[1], batch[2], batch[3], batch[4], batch[5]
+        # print(input_.shape, input_)
+        # print(neigbor_[0].shape, neigbor_)
+        if args.all_patarn:
+            combis = itertools.combinations([input_] + neigbor_, args.nFrames)
         else:
-            with torch.no_grad():
-                if args.nFrames != 1:
-                    prediction = model(input, neigbor, flow)
-                else:
-                    prediction = model(input)
+            combis = [[input_] + neigbor_]
 
-        if args.residual:
-            prediction = prediction + bicubic
+        for combi in combis:
+            input, neigbor = combi[0], combi[1:]
+            target, flow, bicubic = target_, flow_, bicubic_
+            # print(input.shape, input)
+            # print(neigbor)
+            with torch.no_grad():
+                if cuda:
+                    input = Variable(input).cuda(gpus_list[0])
+                    bicubic = Variable(bicubic).cuda(gpus_list[0])
+                    neigbor = [Variable(j).cuda(gpus_list[0]) for j in neigbor]
+                    flow = [Variable(j).cuda(gpus_list[0]).float() for j in flow]
+                else:
+                    input = Variable(input).to(device=device, dtype=torch.float)
+                    bicubic = Variable(bicubic).to(device=device, dtype=torch.float)
+                    neigbor = [Variable(j).to(device=device, dtype=torch.float) for j in neigbor]
+                    flow = [Variable(j).to(device=device, dtype=torch.float) for j in flow]
+
+            t0 = time.time()
+            if args.chop_forward:
+                with torch.no_grad():
+                    prediction = chop_forward(input, neigbor, flow, model, args.upscale_factor)
+            else:
+                with torch.no_grad():
+                    if args.model_type == "UNet":
+                        prediction = model(input)
+                    else:
+                        if args.nFrames != 1:
+                            prediction = model(input, neigbor, flow)
+                        else:
+                            prediction = model(input)
+
+            if args.residual:
+                prediction = prediction + bicubic
+                
+            t1 = time.time()
+            print("==> Processing: %s || Timer: %.4f sec." % (str(count), (t1 - t0)))
+            save_img(prediction.cpu().data, str(count), True)
+            save_img(target, str(count), False)
             
-        t1 = time.time()
-        print("==> Processing: %s || Timer: %.4f sec." % (str(count), (t1 - t0)))
-        save_img(prediction.cpu().data, str(count), True)
-        save_img(target, str(count), False)
-        
-        #concat img
-        if args.denoise: # modified by shinjo
-            tmp = [input] + neigbor + [prediction]
-            neigbor_img = torch.cat(tmp, 3)
-            print(input.shape, neigbor_img.shape)
-            save_img(neigbor_img.cpu(), str(count)+"_inputs", False)
-        
-        prediction = prediction.cpu()
-        prediction = prediction.data[0].numpy().astype(np.float32)
-        prediction = prediction*255.
-        
-        target = target.squeeze().numpy().astype(np.float32)
-        target = target*255.
-        if not upscale_only:
-            psnr_predicted = PSNR(prediction, target, shave_border=args.upscale_factor)
-            print("PSNR Predicted = ", psnr_predicted)
-            avg_psnr_predicted += psnr_predicted
-        count += 1
+            #concat img
+            if args.denoise: # modified by shinjo
+                tmp = [input] + neigbor + [prediction]
+                neigbor_img = torch.cat(tmp, 3)
+                print(input.shape, neigbor_img.shape)
+                save_img(neigbor_img.cpu(), str(count)+"_inputs", False)
+            
+            prediction = prediction.cpu()
+            prediction = prediction.data[0].numpy().astype(np.float32)
+            prediction = prediction*255.
+            
+            target = target.squeeze().numpy().astype(np.float32)
+            target = target*255.
+            if not upscale_only:
+                psnr_predicted = PSNR(prediction, target, shave_border=args.upscale_factor)
+                print("PSNR Predicted = ", psnr_predicted)
+                avg_psnr_predicted += psnr_predicted
+            count += 1
         
     if not upscale_only:  # Otherwise the print will error on '-u'
         print("Avg PSNR Predicted = ", avg_psnr_predicted/count)

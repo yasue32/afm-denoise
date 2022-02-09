@@ -11,6 +11,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import random
+from copy import deepcopy
 
 import logger
 import utils
@@ -20,6 +21,7 @@ from rbpn import GeneratorLoss
 from rbpn import Net as RBPN
 from rbpn import Net2 as RBPN2
 from SRGAN.model import Discriminator
+from UNet import UNet16
 
 # ################################################# iSEEBETTER TRAINER KNOB
 # upscale_factor = 4
@@ -46,7 +48,7 @@ parser.add_argument('--future_frame', type=bool, default=True, help="use future 
 parser.add_argument('--nFrames', type=int, default=7)
 parser.add_argument('--patch_size', type=int, default=64, help='0 to use original frame size')
 parser.add_argument('--data_augmentation', type=bool, default=True)
-parser.add_argument('--model_type', type=str, default='RBPN')
+parser.add_argument('--model_type', type=str, default='RBPN', help="RBPN or U-Net")
 parser.add_argument('--residual', type=bool, default=False)
 parser.add_argument('--pretrained_sr', default='RBPN_4x.pth', help='sr pretrained base model')
 parser.add_argument('--pretrained', action='store_true', help='Use pretrained model')
@@ -71,6 +73,7 @@ parser.add_argument('--pretrained_d', default="", help='pretrained Discriminator
 parser.add_argument('--noise_flow_type', type=str, default="p", help="s=sift_flow, p=filter")
 # parser.add_argument('--random_crop', type=int, default=0, help='0 to use original frame size (for AFM project)')
 parser.add_argument("--aloss", default=0.005, help="weights of adversarial loss")
+# parser.add_argument('--network_type', type=str, default="RBPN", help="type of generator network. RBPN or UNet")
 
 
 def trainModel(
@@ -117,6 +120,11 @@ def trainModel(
             except BaseException:
                 D_parameters = list(netD.module.parameters())
 
+    if args.model_type == "UNet":
+        unet_repeat = 9
+    else:
+        unet_repeat = 1
+
     for data in iterTrainBar:
         batchSize = len(data)
         runningResults['batchSize'] += batchSize
@@ -133,161 +141,184 @@ def trainModel(
 
         DLoss = 0
 
-        input, target, neigbor, flow, bicubic, good_img = data[0], data[1], data[2], data[3], data[4], data[5]
-        if args.gpu_mode and torch.cuda.is_available():
-            input = Variable(input).to(device)  # shinjo modified
-            target = Variable(target).to(device)
-            bicubic = Variable(bicubic).to(device)
-            neigbor = [Variable(j).to(device) for j in neigbor]
-            realHR = Variable(good_img).to(device)
-            flow = [Variable(j).to(device).float() for j in flow]
-        else:
-            input = Variable(input).to(device=device, dtype=torch.float)
-            target = Variable(target).to(device=device, dtype=torch.float)
-            bicubic = Variable(bicubic).to(device=device, dtype=torch.float)
-            neigbor = [
-                Variable(j).to(
-                    device=device,
-                    dtype=torch.float) for j in neigbor]
-            realHR = Variable(realHR).to(device=device, dtype=torch.float)
-            flow = [Variable(j).to(device=device, dtype=torch.float)
-                    for j in flow]
-        if args.nFrames == 1:
-            fakeHR = netG(input)  # 20211208
-        else:
-            fakeHR = netG(input, neigbor, flow)
-        if args.residual:
-            fakeHR = fakeHR + bicubic
+        for repeater in range(unet_repeat):
 
-        if netD:
-            netD.zero_grad()
+            input, target, neigbor, flow, bicubic, good_img = data[0], data[1], data[2], data[3], data[4], data[5]
+            if args.gpu_mode and torch.cuda.is_available():
+                input = Variable(input).to(device)  # shinjo modified
+                target = Variable(target).to(device)
+                bicubic = Variable(bicubic).to(device)
+                neigbor = [Variable(j).to(device) for j in neigbor]
+                realHR = Variable(good_img).to(device)
+                flow = [Variable(j).to(device).float() for j in flow]
+            else:
+                input = Variable(input).to(device=device, dtype=torch.float)
+                target = Variable(target).to(device=device, dtype=torch.float)
+                bicubic = Variable(bicubic).to(device=device, dtype=torch.float)
+                neigbor = [
+                    Variable(j).to(
+                        device=device,
+                        dtype=torch.float) for j in neigbor]
+                realHR = Variable(realHR).to(device=device, dtype=torch.float)
+                flow = [Variable(j).to(device=device, dtype=torch.float)
+                        for j in flow]
 
-            # realOut = netD(target).mean()
-            # print(realHR.shape, fakeHR.shape, target.shape)
-            realOut = netD(realHR).mean()
-            fakeOut = netD(fakeHR).mean()
-            DLoss = (fakeOut - realOut)
+            if args.model_type == "UNet":
+                if repeater == (unet_repeat - 1):
+                    fakeHR = netG(input)
+                else:
+                    # print("neigbor", neigbor[repeater].shape, input.shape)
+                    fakeHR = netG(neigbor[repeater])
+                # length = len(neigbor)
+                # target = sum(neigbor)
+                # if length > 0:
+                #     target /= length
+                # fakeHR = netG(input)
+                # for j in range(len(neigbor[0])):
+                #     tmp = torch.zeros((0, *target.shape[-3:])).to(target.device)
+                #     for i in range(length):
+                #         tmp = torch.cat((tmp, neigbor[i][j].unsqueeze(dim=0)))
+                #     fakeHR = torch.cat((fakeHR, netG(tmp)))
+                # target = torch.cat([deepcopy(target)] * (length+1))
 
-            DLoss.backward(retain_graph=True, inputs=D_parameters)
+            else:
+                if args.nFrames == 1:
+                    fakeHR = netG(input)
+                else:
+                    fakeHR = netG(input, neigbor, flow)
 
-        netG.zero_grad()
-        if args.APITLoss:
-            assert netD is not None
-            fakeOut = netD(fakeHR).mean()
-            GLoss = generatorCriterion(fakeOut, fakeHR, target, 0)
+            if args.residual:
+                fakeHR = fakeHR + bicubic
 
-        else:
-            assert netD is None
-            GLoss = generatorCriterion(fakeHR, target)
+            if netD:
+                netD.zero_grad()
 
-        GLoss.backward(inputs=G_parameters)
-        if netD is not None:
-            optimizerD.step()
-        optimizerG.step()
+                # realOut = netD(target).mean()
+                # print(realHR.shape, fakeHR.shape, target.shape)
+                realOut = netD(realHR).mean()
+                fakeOut = netD(fakeHR).mean()
+                DLoss = (fakeOut - realOut)
 
-        if netD is not None:
-            realScrs.append(realOut)
-            fakeScrs.append(fakeOut)
+                DLoss.backward(retain_graph=True, inputs=D_parameters)
 
-        # fakeHR = netG(input, neigbor, flow)
-        # if args.residual:
-        #     fakeHR = fakeHR + bicubic
+            netG.zero_grad()
+            if args.APITLoss:
+                assert netD is not None
+                fakeOut = netD(fakeHR).mean()
+                GLoss = generatorCriterion(fakeOut, fakeHR, target, 0)
 
-        # if netD: # shinjo modified
-        #     realOut = netD(target).mean()
-        #     DLoss_real = (0.5 - realOut) / len(data)
-        #     # DLoss_real.backward(retain_graph = True)
+            else:
+                assert netD is None
+                GLoss = generatorCriterion(fakeHR, target)
 
-        #     fakeOut = netD(fakeHR).mean()
-        #     DLoss_fake = (0.5 + fakeOut) / len(data)
-        #     # DLoss_fake.backward(retain_graph = False)
+            GLoss.backward(inputs=G_parameters)
+            if netD is not None:
+                optimizerD.step()
+            optimizerG.step()
 
-        #     DLoss = DLoss_fake + DLoss_real
-        #     DLoss.backward()
+            if netD is not None:
+                realScrs.append(realOut)
+                fakeScrs.append(fakeOut)
 
-        #     # realOut = netD(target).mean()
-        #     # fakeOut = netD(fakeHR).mean()
+            # fakeHR = netG(input, neigbor, flow)
+            # if args.residual:
+            #     fakeHR = fakeHR + bicubic
 
-        #     # DLoss_real = -realOut
-        #     # DLoss_fake = fakeOut
+            # if netD: # shinjo modified
+            #     realOut = netD(target).mean()
+            #     DLoss_real = (0.5 - realOut) / len(data)
+            #     # DLoss_real.backward(retain_graph = True)
 
-        #     if args.APITLoss:
-        #         fakeHRs.append(fakeHR)
-        #         targets.append(target)
-        #     fakeScrs.append(fakeOut)
-        #     realScrs.append(realOut)
+            #     fakeOut = netD(fakeHR).mean()
+            #     DLoss_fake = (0.5 + fakeOut) / len(data)
+            #     # DLoss_fake.backward(retain_graph = False)
 
-        #     # DLoss = DLoss + 1 - realOut + fakeOut
-        #     # DLoss = DLoss / len(data)
+            #     DLoss = DLoss_fake + DLoss_real
+            #     DLoss.backward()
 
-        #     # Calculate gradients
+            #     # realOut = netD(target).mean()
+            #     # fakeOut = netD(fakeHR).mean()
 
-        #     # DLoss = DLoss_fake + DLoss_real
-        #     # DLoss.backward(retain_graph=True) # default: True
+            #     # DLoss_real = -realOut
+            #     # DLoss_fake = fakeOut
 
-        #     # Update weights
-        #     optimizerD.step()
+            #     if args.APITLoss:
+            #         fakeHRs.append(fakeHR)
+            #         targets.append(target)
+            #     fakeScrs.append(fakeOut)
+            #     realScrs.append(realOut)
 
-        #     fakeSrcs = []
-        #     fakeOut = netD(fakeHR).mean()
-        #     fakeScrs.append(fakeOut)
+            #     # DLoss = DLoss + 1 - realOut + fakeOut
+            #     # DLoss = DLoss / len(data)
 
-        # ################################################################################################################
-        # # (2) Update G network: minimize 1-D(G(z)) + Perception Loss + Image Loss + TV Loss
-        # ################################################################################################################
-        # GLoss = 0
+            #     # Calculate gradients
 
-        # # Zero-out gradients, i.e., start afresh
-        # netG.zero_grad()
+            #     # DLoss = DLoss_fake + DLoss_real
+            #     # DLoss.backward(retain_graph=True) # default: True
 
-        # if args.APITLoss:
-        #     if not netD: # shinjo modified
-        #         raise Exception("If you use APITLoss, please run without --RBPN_only")
-        #     idx = 0
+            #     # Update weights
+            #     optimizerD.step()
 
-        #     for fakeHR, fake_scr, HRImg in zip(fakeHRs, fakeScrs, targets):
-        #         fakeHR = fakeHR.to(device)
-        #         fake_scr = fake_scr.to(device)
-        #         HRImg = HRImg.to(device)
-        #         GLoss += generatorCriterion(fake_scr, fakeHR, HRImg, idx)
-        #         idx += 1
-        # else:
-        #     GLoss = generatorCriterion(fakeHR, target)
+            #     fakeSrcs = []
+            #     fakeOut = netD(fakeHR).mean()
+            #     fakeScrs.append(fakeOut)
 
-        # GLoss = GLoss / len(data)
+            # ################################################################################################################
+            # # (2) Update G network: minimize 1-D(G(z)) + Perception Loss + Image Loss + TV Loss
+            # ################################################################################################################
+            # GLoss = 0
 
-        # # Calculate gradients
-        # GLoss.backward()
+            # # Zero-out gradients, i.e., start afresh
+            # netG.zero_grad()
 
-        # # Update weights
-        # optimizerG.step()
+            # if args.APITLoss:
+            #     if not netD: # shinjo modified
+            #         raise Exception("If you use APITLoss, please run without --RBPN_only")
+            #     idx = 0
 
-        runningResults['GLoss'] += GLoss.item() * args.batchSize
+            #     for fakeHR, fake_scr, HRImg in zip(fakeHRs, fakeScrs, targets):
+            #         fakeHR = fakeHR.to(device)
+            #         fake_scr = fake_scr.to(device)
+            #         HRImg = HRImg.to(device)
+            #         GLoss += generatorCriterion(fake_scr, fakeHR, HRImg, idx)
+            #         idx += 1
+            # else:
+            #     GLoss = generatorCriterion(fakeHR, target)
 
-        if netD:
-            realOut = torch.Tensor(realScrs).mean()
-            fakeOut = torch.Tensor(fakeScrs).mean()
-            runningResults['DLoss'] += DLoss.item() * args.batchSize
-            runningResults['DScore'] += realOut.item() * args.batchSize
-            runningResults['GScore'] += fakeOut.item() * args.batchSize
+            # GLoss = GLoss / len(data)
 
-            trainBar.set_description(
-                desc='[Epoch: %d/%d] G Loss: %.4f' %
-                (epoch, args.nEpochs, runningResults['GLoss'] / runningResults['batchSize']))
-        else:
-            trainBar.set_description(
-                desc='[Epoch: %d/%d] D Loss: %.4f G Loss: %.4f D(x): %.4f D(G(z)): %.4f' %
-                (epoch,
-                 args.nEpochs,
-                 runningResults['DLoss'] /
-                 runningResults['batchSize'],
-                 runningResults['GLoss'] /
-                 runningResults['batchSize'],
-                 runningResults['DScore'] /
-                 runningResults['batchSize'],
-                 runningResults['GScore'] /
-                 runningResults['batchSize']))
-        gc.collect()
+            # # Calculate gradients
+            # GLoss.backward()
+
+            # # Update weights
+            # optimizerG.step()
+
+            runningResults['GLoss'] += GLoss.item() * args.batchSize
+
+            if netD:
+                realOut = torch.Tensor(realScrs).mean()
+                fakeOut = torch.Tensor(fakeScrs).mean()
+                runningResults['DLoss'] += DLoss.item() * args.batchSize
+                runningResults['DScore'] += realOut.item() * args.batchSize
+                runningResults['GScore'] += fakeOut.item() * args.batchSize
+
+                trainBar.set_description(
+                    desc='[Epoch: %d/%d] G Loss: %.4f' %
+                    (epoch, args.nEpochs, runningResults['GLoss'] / runningResults['batchSize']))
+            else:
+                trainBar.set_description(
+                    desc='[Epoch: %d/%d] D Loss: %.4f G Loss: %.4f D(x): %.4f D(G(z)): %.4f' %
+                    (epoch,
+                    args.nEpochs,
+                    runningResults['DLoss'] /
+                    runningResults['batchSize'],
+                    runningResults['GLoss'] /
+                    runningResults['batchSize'],
+                    runningResults['DScore'] /
+                    runningResults['batchSize'],
+                    runningResults['GScore'] /
+                    runningResults['batchSize']))
+            gc.collect()
 
     netG.eval()
 
@@ -439,13 +470,35 @@ def main():
         shuffle=True)
 
     # Use generator as RBPN
-    if args.nFrames == 1:
-        netG = DBPNS(base_filter=3, feat=3, num_stages=3,
-                     scale_factor=args.upscale_factor)  # 20211208
-    else:
-        if args.denoise:
-            if not args.depth_img:
-                netG = RBPN2(
+    if args.model_type == "UNet":
+        netG = UNet16(num_classes=3, num_filters=32, 
+            pretrained=args.pretrained, up_sampling_method="deconv")
+    elif args.model_type == "RBPN":
+        if args.nFrames == 1:
+            netG = DBPNS(base_filter=3, feat=3, num_stages=3,
+                        scale_factor=args.upscale_factor)  # 20211208
+        else:
+            if args.denoise:
+                if not args.depth_img:
+                    netG = RBPN2(
+                        num_channels=args.num_channels,
+                        base_filter=256,
+                        feat=64,
+                        num_stages=3,
+                        n_resblock=5,
+                        nFrames=args.nFrames,
+                        scale_factor=args.upscale_factor)
+                else:
+                    netG = RBPN2(
+                        num_channels=1,
+                        base_filter=256,
+                        feat=64,
+                        num_stages=3,
+                        n_resblock=5,
+                        nFrames=args.nFrames,
+                        scale_factor=args.upscale_factor)
+            else:
+                netG = RBPN(
                     num_channels=args.num_channels,
                     base_filter=256,
                     feat=64,
@@ -453,24 +506,6 @@ def main():
                     n_resblock=5,
                     nFrames=args.nFrames,
                     scale_factor=args.upscale_factor)
-            else:
-                netG = RBPN2(
-                    num_channels=1,
-                    base_filter=256,
-                    feat=64,
-                    num_stages=3,
-                    n_resblock=5,
-                    nFrames=args.nFrames,
-                    scale_factor=args.upscale_factor)
-        else:
-            netG = RBPN(
-                num_channels=args.num_channels,
-                base_filter=256,
-                feat=64,
-                num_stages=3,
-                n_resblock=5,
-                nFrames=args.nFrames,
-                scale_factor=args.upscale_factor)
     logger.info('# of Generator parameters: %s', sum(param.numel()
                 for param in netG.parameters()))
 
