@@ -47,7 +47,7 @@ def get_keypoints(img, pt1 = (0, 0), pt2 = None):
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     mask = cv2.rectangle(np.zeros_like(gray), pt1, pt2, color=1, thickness=-1)
     #sift = cv2.AKAZE_create()
-    sift = cv2.SIFT_create()
+    sift = cv2.SIFT_create(sigma=0.5)
     # find the key points and descriptors with AKAZE
     return sift.detectAndCompute(gray, mask=mask)
 
@@ -68,6 +68,7 @@ def get_matcher(img, kp2, des2):
     good = []
     if len(matches[0])==1:
         return None, None
+    # print(matches[0][0].distance)
     for m, n in matches:
         if m.distance < 0.7 * n.distance:
             good.append(m)
@@ -94,7 +95,7 @@ def get_alignment_img(img, kp2, des2):
     height, width = img.shape[:2]
     # 対応点を探索
     apt1, apt2 = get_matcher(img, kp2, des2)
-    if type(apt1)==type(apt2):
+    if type(apt1)==type(apt2)==type(None):
         return None
  
     # アフィン行列の推定
@@ -102,7 +103,7 @@ def get_alignment_img(img, kp2, des2):
  
     # アフィン変換
     if mtx is not None:
-        return cv2.warpAffine(img, mtx, (width, height))
+        return cv2.warpAffine(img, mtx, (width, height), borderValue=(0,255,0))
     else:
         return None
 
@@ -128,11 +129,13 @@ def affine_align(target, input):
     aligned_list=[]
     kp, des = get_keypoints(np.array(target))
     if len(kp)==0:
+        # print("no key point")
         return input
     for img in input:
         img2 = np.array(img)    
         align = get_alignment_img(img2, kp, des)
         if type(align)==type(None):
+            # print("no matching")
             align = img2.copy()
         aligned_list.append(align)
     return aligned_list

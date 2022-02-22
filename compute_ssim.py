@@ -66,18 +66,20 @@ class BlurScore():
         return cv2.Laplacian((img * 255).astype(np.uint8), cv2.CV_64F).var()
 
 filenames = [
-    "Results/pretrained2x_mse_Pflow_f1_256"
+    "Results/pretrained2x_mae_Pflow_blur3_256_all"
+    # "Results/patchwork_32"
 ]
 
 # n_frames = 4
 
-sub = "test_dataset_per_sequence/sep_trainlist_1x"
+sub = "test_dataset_per_sequence0000/sep_trainlist_2x"
+# sub = "threshold_dicision4"
 
 target_name = "{}.png"
-pred_name = "{}_RBPNF1.png"
+pred_name = "{}_RBPNF7.png"
 inputs_name = "{}_inputs.png"
 
-dataset = "test_dataset_per_sequence"
+# dataset = "test_dataset_per_sequence"
 
 
 noise_filter = NoiseScore()
@@ -144,7 +146,7 @@ for filename in filenames:
         if noise_scores[0] < noise_scores[1]:
             zouka += 1
         print("mean of diff:",diff/(i+1)) 
-        print("ノイズ増加回数 {}/{},  {}%".format(zouka, i+1, zouka/(i+1)))       
+        print("ノイズ増加回数 {}/{},  {}%".format(zouka, i+1, round(zouka/(i+1)*100)))       
 
 
         print(df.head)

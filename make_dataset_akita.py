@@ -8,13 +8,18 @@ from sift_flow_torch import SiftFlowTorch
 from third_party.flowiz import flowiz
 import cv2
 from tqdm import tqdm
+import alignment
+import numpy as np
+from copy import deepcopy
 
 device=torch.device('cuda')
 
 #DATA_DIR = 'ext_clean_img'
-DATA_DIR = "ext_clean_img"
-SAVE_DIR = 'ext_clean_dataset_per_sequence_nopt'
-test_flag = True
+DATA_DIR = "test_imgs"
+SAVE_DIR = 'test_dataset_per_sequence_aligned2'
+# test_flag = True
+
+align = True
 
 sift_flow = SiftFlowTorch(
     cell_size=1,
@@ -28,10 +33,10 @@ sift_flow = SiftFlowTorch(
 ### find match
 def find_local_matches(desc1, desc2, kernel_size=5):
     """SIFT特徴量の一致を検索する
-    desc1: sift_flow, １枚目
-    desc2: sift_flow, ２枚目
+    desc1: sift_flow, 1枚目
+    desc2: sift_flow, 2枚目
     kernel_size: int, flowのノルムの最大値
-    """
+    """ 
     desc2_unfolded = F.unfold(desc2, kernel_size, padding=kernel_size//2)
     desc2_unfolded = desc2_unfolded.reshape(
         1, desc2.shape[1], kernel_size*kernel_size, desc2.shape[2], desc2.shape[3])
@@ -93,6 +98,7 @@ def cal_flow(model, imgs, kernel_size=8):
 
 
 i = 0
+same_count = 0
 
 for pathes in tqdm(zip(*[iter(sorted(glob.glob(os.path.join(DATA_DIR, '**/*.png'))))]*10)):
     assert pathes[0][-5] == '0'
@@ -100,16 +106,31 @@ for pathes in tqdm(zip(*[iter(sorted(glob.glob(os.path.join(DATA_DIR, '**/*.png'
     os.makedirs(save_dir, exist_ok=True)
 
     imgs = []
-    for index, path in enumerate(pathes):
+    # print(pathes)
+    for index, path in enumerate(pathes[::-1]):
         save_path = os.path.join(save_dir, str(index).zfill(4)+".png")
-        shutil.copy(path, save_path)
+        if align:
+            if index == 0:
+                target_img = cv2.imread(path)
+                shutil.copy(path, save_path)
+            else:
+                input_img = cv2.imread(path)
+                aligned = alignment.affine_align(target_img, [deepcopy(input_img)])[0]
+                # print(aligned - input_img)
+                if np.sum(aligned - input_img) == 0:
+                    same_count += 1
+                cv2.imwrite(save_path, aligned)
+        else:
+            shutil.copy(path, save_path)
+        
         imgs.append(cv2.imread(save_path))
 
-    # imgs = [cv2.imread(i) for i in index]
+    ## ptを保存したいときは外す
     # flows = cal_flow(sift_flow, imgs, kernel_size=15)
-    # # print(flows.shape)
     # for index, path in enumerate(pathes):
     #     save_path = os.path.join(save_dir, str(index).zfill(4)+".pt")
     #     torch.save(flows[index], save_path)
 
+    if align:
+        print(same_count)
     i += 1

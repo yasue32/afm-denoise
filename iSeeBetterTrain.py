@@ -201,14 +201,24 @@ def trainModel(
 
                 DLoss.backward(retain_graph=True, inputs=D_parameters)
 
+            # fakeHR [B, C, H, W] (0~1)
+            # affine変換したときの補完領域でlossを計算しない
+            if args.alignment:
+                mask = torch.ones(target.shape[0], 1, target.shape[2], target.shape[3]).to(device=device)
+                mask_color = [0,1,0]
+                for channel in range(target.shape[1]):
+                    mask = mask * (target[:,channel]==mask_color[channel])
+                # print(mask)
+
+
             netG.zero_grad()
             if args.APITLoss:
                 assert netD is not None
                 fakeOut = netD(fakeHR).mean()
                 GLoss = generatorCriterion(fakeOut, fakeHR, target, 0)
-
             else:
                 assert netD is None
+
                 GLoss = generatorCriterion(fakeHR, target)
 
             GLoss.backward(inputs=G_parameters)
@@ -562,7 +572,7 @@ def main():
     # W&B
     if args.use_wandb:
         import wandb
-        wandb.init(project="afm-image_denoising", config=args)
+        wandb.init(project="afm-image_denoising", config=args, name=args.save_folder.split("/")[-2])
         wandb.watch(netG)
 
     # tensorboard

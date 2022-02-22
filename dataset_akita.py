@@ -295,13 +295,15 @@ class TrainDataset(Dataset):
             image = cv2.imread(path).astype(np.float32) / 255
             images.append(image)
 
-            # if self.noise_flow_type == "s":
-            flow_fname = os.path.basename(path).split('.', 1)[0]
-            path2 = os.path.join(
-                ".", self.sequence_dirs[index], f'{flow_fname}.pt')
-            flow = torch.load(path2, map_location=torch.device('cpu'))
-            # print(flow)
-            flows.append(flow)
+            if self.noise_flow_type == "s":
+                flow_fname = os.path.basename(path).split('.', 1)[0]
+                path2 = os.path.join(
+                    ".", self.sequence_dirs[index], f'{flow_fname}.pt')
+                flow = torch.load(path2, map_location=torch.device('cpu'))
+                # print(flow)
+                flows.append(flow)
+            else:
+                flows = [torch.zeros((10, images[0].shape[0], images[0].shape[1], 2))]*10
         # print(len(images))
         # if self.noise_flow_type == "s":
         return np.stack(images), torch.stack(flows)

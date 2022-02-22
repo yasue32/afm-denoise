@@ -59,14 +59,14 @@ class TrainDataset(Dataset):
             self.blur_threshold_upper = 100000
         
         # testでもGTを選択する場合
-        # if noise_flow_type == "s":  # s as sift-flow
-        #     self.noise_threshold = 9000
-        #     self.blur_threshold_lower = 250
-        #     self.blur_threshold_upper = 1500
-        # elif noise_flow_type == "p":  # p as pyflow but means filter mode
-        #     self.noise_threshold = 0.04
-        #     self.blur_threshold_lower = 250
-        #     self.blur_threshold_upper = 1500
+        if noise_flow_type == "s":  # s as sift-flow
+            self.noise_threshold = 9000
+            self.blur_threshold_lower = 250
+            self.blur_threshold_upper = 1500
+        elif noise_flow_type == "p":  # p as pyflow but means filter mode
+            self.noise_threshold = 0.04
+            self.blur_threshold_lower = 250
+            self.blur_threshold_upper = 1500
 
 
         self.calc_scores = DegradationScore(noise_flow_type=noise_flow_type)
@@ -161,11 +161,11 @@ class TrainDataset(Dataset):
             # print(noise_inds)
             # print(noise_scores)
             # print(noise_inds[noise_scores<self.noise_threshold])
-            self.noise_threshold = min(noise_scores) * 1.05
+            self.noise_threshold = min(noise_scores) * 1.1
 
-            non_noise_bools = noise_scores < self.noise_threshold
-            non_blur_bools = (self.blur_threshold_lower < blur_scores) * \
-                (blur_scores < self.blur_threshold_upper).T
+            non_noise_bools = noise_scores <= self.noise_threshold
+            non_blur_bools = (self.blur_threshold_lower <= blur_scores) * \
+                (blur_scores <= self.blur_threshold_upper).T
 
             good_img_bools = non_noise_bools * non_blur_bools.T
             if sum(good_img_bools) == 0:
