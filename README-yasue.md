@@ -32,7 +32,9 @@ scikit-image == 0.17.2
 - `command_memo.sh` / 実行コマンドの例．再現実験する際のコマンドもあり．
 
 ## 4. データセット
-- orig_img: オリジナルの画像．ただし明らかにノイズが多すぎる画像はすでに省かれている．
+`/misc/dl001/dataset/yasue/AFM2021/`にある．
+- all_img: AFMによって撮影された画像全て．データセットに使用されていない画像も含む．
+- orig_img: データセットに使用する画像．ただし明らかにノイズが多すぎる画像はすでに省かれている．
 - train_imgs: 学習用画像．データセットはafm_dataset_per_sequence．
 - test_imgs: テスト用画像．データセットはtest_dataset_per_sequence．
 - ext_clean_img: ノイズが多い画像をさらに目視で省いた学習用画像．データセットはext_clean_dataset_per_sequence．
@@ -46,7 +48,7 @@ scikit-image == 0.17.2
   - 事前学習されたモデルを使う場合，`--pretrained --pretrained_sr model.pth`．
   - この場合実際に読み込もうとするファイルは`pass/to/save/model.pth`になるので注意．
 - GPUの指定は引数では行わず，`CUDA_VISIBLE_DEVICES=x,y python3 iSeeBetter...`で行っていた．
-  - ２枚以上使うときは`--gpus 2 --useDataParallel`とする．
+  - ２枚以上使うときは`--gpus (数) --useDataParallel`とする．
   - 他にいい方法があれば教えてください．
 
 ### その他の使える引数
