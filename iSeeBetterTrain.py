@@ -33,7 +33,7 @@ parser.add_argument('--upscale_factor', type=int, default=4, help="super resolut
 parser.add_argument('--batchSize', type=int, default=1, help='training batch size')
 parser.add_argument('--testBatchSize', type=int, default=5, help='testing batch size')
 parser.add_argument('--start_epoch', type=int, default=1, help='Starting epoch for continuing training')
-parser.add_argument('--nEpochs', type=int, default=150, help='number of epochs to train for')
+parser.add_argument('--nEpochs', type=int, default=1000, help='number of epochs to train for')
 parser.add_argument('--snapshots', type=int, default=1, help='Snapshots')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning Rate. Default=1e-4')
 parser.add_argument('--gpu_mode', type=bool, default=True)
@@ -203,11 +203,11 @@ def trainModel(
 
             # fakeHR [B, C, H, W] (0~1)
             # affine変換したときの補完領域でlossを計算しない
-            if args.alignment:
-                mask = torch.ones(target.shape[0], 1, target.shape[2], target.shape[3]).to(device=device)
-                mask_color = [0,1,0]
-                for channel in range(target.shape[1]):
-                    mask = mask * (target[:,channel]==mask_color[channel])
+            # if args.alignment:
+            #     mask = torch.ones(target.shape[0], 1, target.shape[2], target.shape[3]).to(device=device)
+            #     mask_color = [0,1,0]
+            #     for channel in range(target.shape[1]):
+            #         mask = mask * (target[:,channel]==mask_color[channel])
                 # print(mask)
 
 
