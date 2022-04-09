@@ -23,7 +23,7 @@ random.seed(346)
 
 
 class TrainDataset(Dataset):
-    def __init__(self, data_dir, nFrames, train=True, noise_flow_type="p", optical_flow="p", patch_size=64, warping=False):
+    def __init__(self, data_dir, nFrames, train=True, noise_flow_type="p", optical_flow="p", patch_size=64, warping=False, downscale=False):
         self.noisy_inputs = False
         if train:
             # self.sequence_dirs = [os.path.join(
@@ -81,6 +81,7 @@ class TrainDataset(Dataset):
         self.train = train
         self.patch_size = int(patch_size)
         self.warping = warping
+        self.downscale = downscale
 
         self.seq_imgs = np.array([])
         self.seq_flows = np.array([])
@@ -116,7 +117,7 @@ class TrainDataset(Dataset):
         else:
             flows = self._get_flow(input, neigbors)
 
-        flow = self._get_flow(input, [target])[0]
+        # flow = self._get_flow(input, [target])[0]
         
         input = self._to_tensor(input)
         target = self._to_tensor(target)
@@ -125,6 +126,14 @@ class TrainDataset(Dataset):
         bicubic = self._to_tensor(bicubic)
         flows = [self._to_tensor(x) for x in flows]
         
+        if self.downscale:
+            input_size = input.shape
+            downscale_transform = transforms.Resize(input_size[1]//2, interpolation=transforms.InterpolationMode.BICUBIC)
+            input = downscale_transform(input)
+            for n in range(len(neigbors)):
+                neigbors[n] = downscale_transform(neigbors[n])
+                flows[n] = downscale_transform(flows[n])
+
         if self.warping:
             warped_target, warped_neigbor = self._warping_img(target, input, neigbors, flows, flow)
             # print(input.shape, warped_input.shape, neigbors[0].shape, warped_neigbor[0].shape)

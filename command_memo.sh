@@ -18,12 +18,12 @@ python3 iSeeBetterTrain.py --upscale_factor 2 --RBPN_only --other_dataset True -
 
 # 位置合わせ（ワーピング）--warping
 
-# 位置合わせ（アフィン変換）
+# 位置合わせ（アフィン変換) --data_dir xxx_dataset_per_sequence_aligned
 python3 iSeeBetterTrain.py --upscale_factor 2 --RBPN_only --other_dataset True --data_dir afm_dataset_per_sequence_align --file_list sep_trainlist.txt --patch_size 64 --batchSize 12 --denoise --save_folder weights/pretrained2x_mse_Pflow_alignment/ --gpus 2 --useDataParallel --pretrained --pretrained_sr RBPN_2x.pth --use_wandb --optical_flow p
 
-# データセット2
+# データセット2 --data_dir ext_clean_dataset_per_sequence
 python3 iSeeBetterTrain.py --upscale_factor 2 --RBPN_only --other_dataset True --data_dir ext_clean_dataset_per_sequence --file_list sep_trainlist.txt --patch_size 64 --batchSize 12 --denoise --save_folder weights/pretrained2x_mse_Pflow_blur3/ --gpus 2 --useDataParallel --pretrained --pretrained_sr RBPN_2x.pth --use_wandb --optical_flow p
 
-# パッチサイズ　--patch_size 32, 64, 96
+# パッチサイズ　--patch_size 32 or 64 or 96
 
 # 残差学習 --residual

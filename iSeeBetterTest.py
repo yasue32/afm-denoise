@@ -11,7 +11,7 @@ from dbpns import Net as DBPNS
 from UNet import UNet16
 from data import get_test_set
 import numpy as np
-import utils
+import utils_isee
 import time
 import cv2
 import math
@@ -73,9 +73,9 @@ print('==> Loading datasets')
 # test_set = get_test_set(args.data_dir, args.nFrames, args.upscale_factor, args.file_list, args.other_dataset, args.future_frame, args.upscale_only, args.warping, args.alignment, args.depth_img, args.optical_flow)
 from dataset_akita import TrainDataset
 if args.all_patarn:
-    test_set = TrainDataset(args.data_dir, 9, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
+    test_set = TrainDataset(args.data_dir, 9, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping, downscale=args.upscale_only)
 else:
-    test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
+    test_set = TrainDataset(args.data_dir, args.nFrames, train=False, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping, downscale=args.upscale_only)
 
 testing_data_loader = DataLoader(dataset=test_set, num_workers=args.threads, batch_size=args.testBatchSize, shuffle=False)
 

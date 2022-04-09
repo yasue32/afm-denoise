@@ -14,7 +14,7 @@ import random
 from copy import deepcopy
 
 import logger
-import utils
+import utils_isee
 # from data import get_training_set
 from dbpns import Net as DBPNS
 from rbpn import GeneratorLoss
@@ -61,7 +61,7 @@ parser.add_argument('-v', '--debug', default=False, action='store_true', help='P
 parser.add_argument('--RBPN_only', action='store_true', required=False, help="use RBPN only")
 parser.add_argument('--log_dir', type=str, default="./log", help="location to save log ")
 parser.add_argument('--shuffle', action='store_true', required=False, help="Use shuffle dataset")
-parser.add_argument('--denoise', action='store_true', required=False, help="set --upscalefactor 1 and --pretreined model")
+parser.add_argument('--denoise', action='store_true', required=False, help="for afm denoisng")
 parser.add_argument('--warping', action='store_true', required=False, help="warping input imgs to target")
 parser.add_argument('--alignment', action='store_true', required=False, help="alignment input imgs to target")
 parser.add_argument('--use_wandb', action='store_true', required=False, help="use wandb logger")
@@ -471,7 +471,7 @@ def main():
 
     from dataset_akita import TrainDataset
     train_set = TrainDataset(args.data_dir, args.nFrames, 
-        train=True, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping)
+        train=True, noise_flow_type=args.noise_flow_type, optical_flow=args.optical_flow, patch_size=args.patch_size, warping=args.warping, downscale=(not args.denoise))
 
     training_data_loader = DataLoader(
         dataset=train_set,

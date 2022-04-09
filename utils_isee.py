@@ -28,6 +28,7 @@ def loadPreTrainedModel(gpuMode, model, modelPath, device):
             for k, v in state_dict.items():
                 # name = "module." + k if not k.startswith("module.") else k  # remove module.
                 name = k[7:] if k.startswith("module.") else "module." + k
+                # print(name)
                 new_state_dict[name] = v
 
 
@@ -35,7 +36,12 @@ def loadPreTrainedModel(gpuMode, model, modelPath, device):
             try:
                 model.load_state_dict(new_state_dict)
             except:
-                model.load_state_dict(new_state_dict, strict=False)
+                print(" ")
+                try:
+                    model.load_state_dict(state_dict, strict=False)
+                except:
+                    model.load_state_dict(new_state_dict, strict=False)
+                
         print('Pre-trained SR model loaded from:', modelPath)
     else:
         print('Couldn\'t find pre-trained SR model at:', modelPath)
